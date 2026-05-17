@@ -14,6 +14,8 @@ import { runSummary } from "./test-harness.ts";
 await import("./tokenizer.test.ts");
 await import("./entities.test.ts");
 await import("./whitespace.test.ts");
+await import("./md_emitter.test.ts");
+await import("./md_handler.test.ts");
 await import("./strip.test.ts");
 
 // Run integration test suites (each manages its own HTTP server)
