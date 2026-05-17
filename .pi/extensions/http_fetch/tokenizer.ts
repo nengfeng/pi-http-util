@@ -1,0 +1,168 @@
+/**
+ * tokenizer.ts — HTML tokenizer.
+ *
+ * Tokenizes an HTML string into a sequence of tokens (text, tag, comment, doctype).
+ * Pure, side-effect-free, fully unit-testable.
+ */
+
+// ── Token Types ──────────────────────────────────────────────────────
+
+/** Attribute parsed from a tag. */
+export interface Attribute {
+  name: string;
+  value: string | null;
+}
+
+/** Token types produced by the tokenizer. */
+export type Token =
+  | { kind: "text"; data: string }
+  | { kind: "tag"; name: string; isClosing: boolean; selfClosing: boolean; attributes: Attribute[] }
+  | { kind: "comment"; data: string }
+  | { kind: "doctype"; data: string };
+
+/** Check if a character is basic ASCII whitespace (for tokenizer attribute parsing). */
+function isBasicWhitespace(ch: string): boolean {
+  return ch === " " || ch === "\t" || ch === "\n" || ch === "\r";
+}
+
+// ── Tokenizer ────────────────────────────────────────────────────────
+
+/**
+ * Tokenize an HTML string into a sequence of tokens.
+ *
+ * Handles:
+ * - Text nodes
+ * - Opening, closing, and self-closing tags with attributes
+ * - HTML comments (<!-- ... -->)
+ * - DOCTYPE declarations
+ *
+ * Malformed constructs (unclosed tags, broken comments) degrade gracefully
+ * by emitting partial text tokens.
+ */
+export function* tokenize(html: string): Generator<Token> {
+  let i = 0;
+  const len = html.length;
+
+  while (i < len) {
+    // ── Comment: <!-- ... -->
+    if (html[i] === "<" && html.slice(i, i + 4) === "<!--") {
+      const end = html.indexOf("-->", i + 4);
+      if (end !== -1) {
+        yield { kind: "comment", data: html.slice(i + 4, end) };
+        i = end + 3;
+      } else {
+        // Malformed comment — treat as text
+        yield { kind: "text", data: html[i] };
+        i++;
+      }
+      continue;
+    }
+
+    // ── DOCTYPE: <!DOCTYPE ...>
+    if (html[i] === "<" && html.slice(i, i + 9).toUpperCase() === "<!DOCTYPE") {
+      const end = html.indexOf(">", i + 9);
+      if (end !== -1) {
+        yield { kind: "doctype", data: html.slice(i + 9, end) };
+        i = end + 1;
+      } else {
+        yield { kind: "text", data: html[i] };
+        i++;
+      }
+      continue;
+    }
+
+    // ── Tag: <name ...> or </name>
+    if (html[i] === "<") {
+      const isClosing = html[i + 1] === "/";
+      let start = i + 1 + (isClosing ? 1 : 0);
+
+      // Read tag name
+      let name = "";
+      while (start < len && !isBasicWhitespace(html[start]) && html[start] !== ">" && html[start] !== "/") {
+        name += html[start];
+        start++;
+      }
+
+      if (!name) {
+        // Not a valid tag start (e.g. "< 5")
+        yield { kind: "text", data: html[i] };
+        i++;
+        continue;
+      }
+
+      // Read attributes
+      const attributes: Attribute[] = [];
+      let selfClosing = false;
+
+      while (start < len && html[start] !== ">") {
+        // Skip whitespace
+        while (start < len && isBasicWhitespace(html[start])) start++;
+        if (start >= len || html[start] === ">") break;
+
+        if (html[start] === "/") {
+          selfClosing = true;
+          start++;
+          continue;
+        }
+
+        // Read attribute name
+        let attrName = "";
+        while (start < len && !isBasicWhitespace(html[start]) && html[start] !== "=" && html[start] !== ">") {
+          attrName += html[start];
+          start++;
+        }
+
+        if (!attrName) {
+          start++;
+          continue;
+        }
+
+        // Skip whitespace before =
+        while (start < len && isBasicWhitespace(html[start])) start++;
+
+        let attrValue: string | null = null;
+        if (start < len && html[start] === "=") {
+          start++; // skip =
+          // Skip whitespace after =
+          while (start < len && isBasicWhitespace(html[start])) start++;
+
+          if (start < len && (html[start] === '"' || html[start] === "'")) {
+            // Quoted attribute value
+            const quote = html[start];
+            start++;
+            let value = "";
+            while (start < len && html[start] !== quote) {
+              value += html[start];
+              start++;
+            }
+            if (start < len) start++; // skip closing quote
+            attrValue = value;
+          } else {
+            // Unquoted attribute value
+            let value = "";
+            while (start < len && !isBasicWhitespace(html[start]) && html[start] !== ">") {
+              value += html[start];
+              start++;
+            }
+            attrValue = value;
+          }
+        }
+
+        attributes.push({ name: attrName, value: attrValue });
+      }
+
+      if (start < len) start++; // skip >
+      yield { kind: "tag", name: name.toLowerCase(), isClosing, selfClosing, attributes };
+      i = start;
+      continue;
+    }
+
+    // ── Text (everything else, up to next <)
+    let textEnd = html.indexOf("<", i);
+    if (textEnd === -1) textEnd = len;
+    if (textEnd > i) {
+      yield { kind: "text", data: html.slice(i, textEnd) };
+    }
+    i = textEnd;
+  }
+}
