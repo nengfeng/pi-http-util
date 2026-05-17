@@ -3,6 +3,9 @@
  *
  * Tokenizes an HTML string into a sequence of tokens (text, tag, comment, doctype).
  * Pure, side-effect-free, fully unit-testable.
+ *
+ * Content inside <script> and <style> tags is emitted as raw text (not parsed as
+ * HTML), matching how real HTML parsers treat these elements as CDATA-like containers.
  */
 
 // ── Token Types ──────────────────────────────────────────────────────
@@ -152,7 +155,37 @@ export function* tokenize(html: string): Generator<Token> {
       }
 
       if (start < len) start++; // skip >
-      yield { kind: "tag", name: name.toLowerCase(), isClosing, selfClosing, attributes };
+      const tagName = name.toLowerCase();
+
+      // ── Script / style: emit tag, then scan for closing tag ──────
+      // Content inside <script> and <style> is NOT parsed as HTML.
+      // This prevents template scripts (e.g. <script type="text/ng-template">
+      // containing full HTML markup) from confusing depth-based skip logic.
+      if (!isClosing && (tagName === "script" || tagName === "style")) {
+        yield { kind: "tag", name: tagName, isClosing: false, selfClosing, attributes };
+        const closeTag = `</${tagName}>`;
+        const closeIdx = html.toLowerCase().indexOf(closeTag, i);
+        if (closeIdx !== -1) {
+          // Emit raw content as a single text token
+          const rawContent = html.slice(i, closeIdx);
+          if (rawContent.length > 0) {
+            yield { kind: "text", data: rawContent };
+          }
+          // Emit the closing tag
+          yield { kind: "tag", name: tagName, isClosing: true, selfClosing: false, attributes: [] };
+          i = closeIdx + closeTag.length;
+        } else {
+          // Malformed: no closing tag — emit rest as text
+          const rawContent = html.slice(i);
+          if (rawContent.length > 0) {
+            yield { kind: "text", data: rawContent };
+          }
+          i = len;
+        }
+        continue;
+      }
+
+      yield { kind: "tag", name: tagName, isClosing, selfClosing, attributes };
       i = start;
       continue;
     }

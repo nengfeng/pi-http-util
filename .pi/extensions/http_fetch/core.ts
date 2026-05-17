@@ -26,6 +26,7 @@ export {
   stripTags,
   stripHtmlToMd,
   getAttr,
+  getAttrDecoded,
 } from "./strip.ts";
 
 // In-page search
