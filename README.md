@@ -1,6 +1,11 @@
 # http_fetch Extension
 
-Fetch URLs from the internet with content stripping and Markdown conversion.
+Utility for PI Agent to make http calls (to fetch webpages, raw content etc.) with slight capabilities of 
+converting the html to md, strip attributes or whole tags and make a quick in page search.
+
+Abilities:
+- Fetch URLs from the internet with content stripping and Markdown conversion.
+- Do searches within those pages (eg. for scenarios where md content doesn't provide good links and we need to reverse engineer).
 
 ## File Layout
 
