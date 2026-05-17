@@ -11,6 +11,8 @@ import {
   stripAttributes,
   stripTags,
   stripHtmlToMd,
+  resolveStripMethod,
+  applyStrip,
 } from "../../.pi/extensions/http_fetch/core.ts";
 
 // ── Server setup ─────────────────────────────────────────────────────
@@ -137,7 +139,7 @@ async function fetchAndStrip(
   url: string,
   stripMode: string,
   options?: { method?: string; body?: string; headers?: Record<string, string>; followRedirects?: boolean },
-): Promise<{ status: number; text: string; stripped: string }> {
+): Promise<{ status: number; text: string; stripped: string; contentType: string }> {
   const fetchHeaders: Record<string, string> = {
     "User-Agent": "test",
     ...options?.headers,
@@ -149,15 +151,10 @@ async function fetchAndStrip(
     body: options?.method === "POST" ? options.body : undefined,
   });
   const text = await res.text();
-  const stripFns: Record<string, (s: string) => string> = {
-    none: stripNone,
-    whitespace: stripWhitespace,
-    attributes: stripAttributes,
-    tags: stripTags,
-    html2md: stripHtmlToMd,
-  };
-  const stripped = (stripFns[stripMode] || stripNone)(text);
-  return { status: res.status, text, stripped };
+  const contentType = res.headers.get("Content-Type") || "unknown";
+  const resolved = resolveStripMethod(stripMode as any, contentType);
+  const stripped = applyStrip(text, resolved);
+  return { status: res.status, text, stripped, contentType };
 }
 
 // ── Tests ────────────────────────────────────────────────────────────
@@ -182,9 +179,10 @@ export async function runTests() {
       assert(result.stripped.includes("&nbsp;"));
     });
 
-    test("strip=whitespace collapses multi-whitespace", async () => {
+    test("strip=whitespace on plain text falls back to none", async () => {
       const result = await fetchAndStrip(`${baseUrl}/whitespace`, "whitespace");
-      assert.equal(result.stripped, "foo bar baz qux quux");
+      // text/plain is not HTML → falls back to strip=none → content unchanged
+      assert.equal(result.stripped, "foo     bar\n\n\nbaz\t\tqux\u00A0\u00A0quux");
     });
 
     test("strip=whitespace on HTML collapses whitespace but keeps tags", async () => {
@@ -265,10 +263,11 @@ export async function runTests() {
       assert.equal(parsed.status, "ok");
     });
 
-    test("strip=tags on JSON just returns the text as-is", async () => {
+    test("strip=tags on JSON falls back to none (content unchanged)", async () => {
       const result = await fetchAndStrip(`${baseUrl}/json`, "tags");
       const parsed = JSON.parse(result.stripped);
       assert.equal(parsed.message, "hello");
+      assert.equal(parsed.status, "ok");
     });
 
     test("strip=attributes on page with no attributes is identity (minus whitespace)", async () => {
@@ -344,15 +343,46 @@ export async function runTests() {
       }
     });
 
-    test("strip=tags on empty response", async () => {
+    test("strip=tags on JSON response preserved via fallback", async () => {
       const result = await fetchAndStrip(`${baseUrl}/json`, "tags");
       assert(result.stripped.includes("hello"));
     });
 
-    test("strip=html2md on plain text", async () => {
+    test("strip=html2md on plain text falls back to none", async () => {
       const result = await fetchAndStrip(`${baseUrl}/whitespace`, "html2md");
-      assert(result.stripped.includes("foo"));
-      assert(result.stripped.includes("bar"));
+      // text/plain is not HTML → falls back to strip=none → content unchanged
+      assert.equal(result.stripped, "foo     bar\n\n\nbaz\t\tqux\u00A0\u00A0quux");
+    });
+
+    test("strip=html2md on JSON falls back to none (content unchanged)", async () => {
+      const result = await fetchAndStrip(`${baseUrl}/json`, "html2md");
+      // JSON content should pass through unchanged when strip is auto-fallback to none
+      const parsed = JSON.parse(result.text);
+      assert.equal(parsed.message, "hello");
+      assert.equal(parsed.status, "ok");
+      // The raw text should be valid JSON (not mangled by html2md)
+      assert.equal(result.text.trim(), JSON.stringify({ message: "hello", status: "ok" }));
+    });
+
+    test("strip=tags on JSON falls back to none (content unchanged)", async () => {
+      const result = await fetchAndStrip(`${baseUrl}/json`, "tags");
+      const parsed = JSON.parse(result.text);
+      assert.equal(parsed.message, "hello");
+      assert.equal(parsed.status, "ok");
+    });
+
+    test("strip=attributes on JSON falls back to none (content unchanged)", async () => {
+      const result = await fetchAndStrip(`${baseUrl}/json`, "attributes");
+      const parsed = JSON.parse(result.text);
+      assert.equal(parsed.message, "hello");
+      assert.equal(parsed.status, "ok");
+    });
+
+    test("strip=none on JSON is always identity", async () => {
+      const result = await fetchAndStrip(`${baseUrl}/json`, "none");
+      const parsed = JSON.parse(result.text);
+      assert.equal(parsed.message, "hello");
+      assert.equal(parsed.status, "ok");
     });
   });
 

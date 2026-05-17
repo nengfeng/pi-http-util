@@ -25,6 +25,9 @@ await runIntegrationTests();
 const { runTests: runInPageSearchTests } = await import("./in_page_search.test.ts");
 await runInPageSearchTests();
 
+const { runTests: runToolTests } = await import("./tool.test.ts");
+await runToolTests();
+
 // Print unified summary and exit
 const ok = await runSummary();
 if (!ok) process.exit(1);

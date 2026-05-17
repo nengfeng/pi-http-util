@@ -10,34 +10,17 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { truncateHead, truncateTail, formatSize } from "@earendil-works/pi-coding-agent";
-import { stripNone, stripWhitespace, stripAttributes, stripTags, stripHtmlToMd } from "./strip";
+import {
+  executeFetch,
+  validateUrl,
+  buildHeaders,
+  DEFAULT_MAX_BYTES,
+  DEFAULT_MAX_LINES,
+} from "./fetch";
+import type { StripMode } from "./strip";
 import { inPageSearch } from "./in_page_search";
 
-// ── Chrome User-Agent (generic, non-fingerprinting) ──────────────────
-const CHROME_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
-
-// ── Defaults ─────────────────────────────────────────────────────────
-const DEFAULT_MAX_BYTES = 200_000;   // ~40k tokens for web content
-const DEFAULT_MAX_LINES = 5_000;
 const DEFAULT_CONTEXT_LIMIT = 100;   // chars of context around a match
-
-// ── URL Validation ───────────────────────────────────────────────────
-
-/**
- * Validate a URL string. Returns an error message if invalid, null if ok.
- */
-function validateUrl(url: string): string | null {
-  if (!url || typeof url !== "string") {
-    return "URL is required and must be a non-empty string";
-  }
-  try {
-    new URL(url);
-    return null;
-  } catch {
-    return `Invalid URL: "${url}". Must be a valid URL (e.g. https://example.com)`;
-  }
-}
 
 // ── Tool ─────────────────────────────────────────────────────────────
 export default function (pi: ExtensionAPI) {
@@ -143,24 +126,10 @@ export default function (pi: ExtensionAPI) {
       }
 
       // ── Build headers ───────────────────────────────────────────
-      const headers: Record<string, string> = {
-        "User-Agent": CHROME_UA,
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9," +
-          "image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        Connection: "keep-alive",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Sec-Fetch-User": "?1",
-        "Upgrade-Insecure-Requests": "1",
-      };
-
+      let customHeaders: Record<string, string> = {};
       if (rawHeaders) {
         try {
-          Object.assign(headers, JSON.parse(rawHeaders));
+          customHeaders = JSON.parse(rawHeaders);
         } catch {
           return {
             content: [{ type: "text", text: "Error: invalid JSON in `headers`" }],
@@ -170,39 +139,78 @@ export default function (pi: ExtensionAPI) {
         }
       }
 
-      // ── Build fetch options ─────────────────────────────────────
-      const fetchOptions: RequestInit = {
-        method,
-        headers,
-        redirect: follow_redirects ? "follow" : "manual",
-        signal,
-      };
+      const headers = buildHeaders(customHeaders);
 
-      if (body && (method === "POST" || method === "PUT" || method === "PATCH")) {
-        fetchOptions.body = body;
-        if (!headers["Content-Type"]) {
-          headers["Content-Type"] = "text/plain; charset=utf-8";
-        }
-      }
+      // ── Notify progress ─────────────────────────────────────────
+      onUpdate?.({
+        content: [{ type: "text", text: `Fetching ${url} ...` }],
+      });
 
-      // ── Fetch ───────────────────────────────────────────────────
-      let responseText: string;
-      let finalUrl: string;
-      let status: number;
-      let contentType: string;
-
+      // ── Execute fetch ───────────────────────────────────────────
       try {
-        onUpdate?.({
-          content: [{ type: "text", text: `Fetching ${url} ...` }],
+        const result = await executeFetch({
+          url,
+          method,
+          headers,
+          body,
+          followRedirects: follow_redirects,
+          strip: strip as StripMode,
+          signal,
         });
 
-        const res = await fetch(url, fetchOptions);
-        finalUrl = res.url;
-        status = res.status;
-        contentType = res.headers.get("Content-Type") ?? "unknown";
+        // ── Truncate ──────────────────────────────────────────────
+        const truncation =
+          truncate_strategy === "tail"
+            ? truncateTail(result.strippedText, { maxBytes: max_bytes, maxLines: max_lines })
+            : truncateHead(result.strippedText, { maxBytes: max_bytes, maxLines: max_lines });
 
-        // Read as text (handles gzip/br automatically via undici)
-        responseText = await res.text();
+        // ── Build result text ─────────────────────────────────────
+        const rawBytes = new TextEncoder().encode(result.rawText).length;
+        const strippedBytes = new TextEncoder().encode(result.strippedText).length;
+        const strippedLines = result.strippedText.split("\n").length;
+        const isHtml = result.contentType.toLowerCase().includes("text/html");
+
+        let output = `HTTP ${result.httpStatusCode} ${result.finalUrl}\n`;
+        output += `Content-Type: ${result.contentType}\n`;
+        output += `Raw size: ${formatSize(rawBytes)} (${result.rawText.length} chars)\n`;
+        if (result.appliedStripMethod !== "none") {
+          output += `Strip: ${result.appliedStripMethod} → ${formatSize(strippedBytes)} (${result.strippedText.length} chars)\n`;
+        } else if (strip !== "none" && !isHtml) {
+          output += `Strip: ${strip} (skipped, non-HTML content) → ${formatSize(strippedBytes)} (${result.strippedText.length} chars)\n`;
+        }
+        output += `Lines: ${strippedLines}\n`;
+
+        // ── Response headers ──────────────────────────────────────
+        output += `\nResponse Headers:\n`;
+        for (const { key, value } of result.headers) {
+          output += `  ${key}: ${value}\n`;
+        }
+
+        output += "---\n";
+        output += truncation.content;
+
+        if (truncation.truncated) {
+          output += `\n\n[Output truncated: ${truncation.outputLines} of ${truncation.totalLines} lines (${formatSize(truncation.outputBytes)} of ${formatSize(truncation.totalBytes)}).]`;
+        }
+
+        return {
+          content: [{ type: "text", text: output }],
+          details: {
+            url,
+            finalUrl: result.finalUrl,
+            httpStatusCode: result.httpStatusCode,
+            headers: result.headers,
+            contentType: result.contentType,
+            requestedStripMethod: result.requestedStripMethod,
+            appliedStripMethod: result.appliedStripMethod,
+            rawBytes,
+            strippedBytes,
+            strippedLines,
+            truncated: truncation.truncated,
+            outputLines: truncation.outputLines,
+          },
+          isError: result.isError,
+        };
       } catch (err: any) {
         const msg = err?.message ?? String(err);
         return {
@@ -216,65 +224,6 @@ export default function (pi: ExtensionAPI) {
           isError: true,
         };
       }
-
-      // ── Check for HTTP error status ─────────────────────────────
-      const isError = status >= 400;
-
-      // ── Apply strip mode ────────────────────────────────────────
-      const stripFns: Record<string, (s: string) => string> = {
-        none: stripNone,
-        whitespace: stripWhitespace,
-        attributes: stripAttributes,
-        tags: stripTags,
-        html2md: stripHtmlToMd,
-      };
-
-      const stripFn = stripFns[strip] ?? stripNone;
-      const strippedText = stripFn(responseText);
-
-      // ── Truncate ────────────────────────────────────────────────
-      const truncation =
-        truncate_strategy === "tail"
-          ? truncateTail(strippedText, { maxBytes: max_bytes, maxLines: max_lines })
-          : truncateHead(strippedText, { maxBytes: max_bytes, maxLines: max_lines });
-
-      let output = truncation.content;
-
-      // ── Build result ────────────────────────────────────────────
-      const rawBytes = new TextEncoder().encode(responseText).length;
-      const strippedBytes = new TextEncoder().encode(strippedText).length;
-      const strippedLines = strippedText.split("\n").length;
-
-      let result = `HTTP ${status} ${finalUrl}\n`;
-      result += `Content-Type: ${contentType}\n`;
-      result += `Raw size: ${formatSize(rawBytes)} (${responseText.length} chars)\n`;
-      if (strip !== "none") {
-        result += `Strip: ${strip} → ${formatSize(strippedBytes)} (${strippedText.length} chars)\n`;
-      }
-      result += `Lines: ${strippedLines}\n`;
-      result += "---\n";
-      result += output;
-
-      if (truncation.truncated) {
-        result += `\n\n[Output truncated: ${truncation.outputLines} of ${truncation.totalLines} lines (${formatSize(truncation.outputBytes)} of ${formatSize(truncation.totalBytes)}).]`;
-      }
-
-      return {
-        content: [{ type: "text", text: result }],
-        details: {
-          url,
-          finalUrl,
-          status,
-          contentType,
-          strip,
-          rawBytes,
-          strippedBytes,
-          strippedLines,
-          truncated: truncation.truncated,
-          outputLines: truncation.outputLines,
-        },
-        isError,
-      };
     },
   });
 

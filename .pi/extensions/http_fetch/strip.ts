@@ -17,6 +17,36 @@ import { isHtmlWhitespace, collapseWhitespace, collapseWhitespacePreserveLines }
 import { emitEvents } from "./md_emitter.ts";
 import { processEvents } from "./md_handler.ts";
 
+export type StripMode = "none" | "whitespace" | "attributes" | "tags" | "html2md";
+
+/**
+ * Determine whether a strip mode should be applied based on the response Content-Type.
+ * Non-HTML content is never stripped (falls back to "none"), except when
+ * the caller explicitly requested "none".
+ */
+export function resolveStripMethod(
+  requested: StripMode,
+  contentType: string,
+): StripMode {
+  if (requested === "none") return "none";
+  const isHtml = contentType.toLowerCase().includes("text/html");
+  return isHtml ? requested : "none";
+}
+
+/**
+ * Apply the resolved strip mode to the response text.
+ */
+export function applyStrip(text: string, mode: StripMode): string {
+  const stripFns: Record<StripMode, (s: string) => string> = {
+    none: stripNone,
+    whitespace: stripWhitespace,
+    attributes: stripAttributes,
+    tags: stripTags,
+    html2md: stripHtmlToMd,
+  };
+  return (stripFns[mode] ?? stripNone)(text);
+}
+
 /**
  * Post-conversion filter: collapse multiple consecutive blank (or whitespace-only)
  * lines into a single blank line, and strip leading/trailing blank lines.

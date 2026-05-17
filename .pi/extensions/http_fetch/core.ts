@@ -6,6 +6,7 @@
  * - entities.ts   : HTML entity decoding
  * - whitespace.ts : Whitespace detection and collapsing
  * - strip.ts      : Strip modes (none, whitespace, attributes, tags, html2md)
+ * - fetch.ts      : Fetch pipeline (executeFetch, validateUrl, buildHeaders)
  */
 
 // Tokenizer
@@ -27,7 +28,20 @@ export {
   stripHtmlToMd,
   getAttr,
   getAttrDecoded,
+  resolveStripMethod,
+  applyStrip,
 } from "./strip.ts";
+export type { StripMode } from "./strip.ts";
+
+// Fetch pipeline
+export {
+  executeFetch,
+  validateUrl,
+  buildHeaders,
+  DEFAULT_MAX_BYTES,
+  DEFAULT_MAX_LINES,
+} from "./fetch.ts";
+export type { FetchParams, FetchResult } from "./fetch.ts";
 
 // In-page search
 export { inPageSearch } from "./in_page_search.ts";

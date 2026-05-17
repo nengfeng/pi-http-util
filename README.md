@@ -11,6 +11,8 @@ A PI Agent extension for fetching web content and transforming HTML into clean, 
   - `attributes` — remove HTML attributes, collapse whitespace
   - `tags` — remove all HTML tags + decode entities + collapse whitespace
   - `html2md` — convert HTML to readable Markdown (headings, bold, italic, links, lists, code blocks, tables, blockquotes, etc.)
+- **Content-Type safety** — strip modes are only applied when the response `Content-Type` is `text/html`. For non-HTML responses (JSON, plain text, etc.), the tool falls back to `strip=none` automatically, preserving the original content
+- **Rich response metadata** — every response includes the HTTP status code, all response headers, and the requested vs. actually applied strip method. Headers are printed directly in the output text under a `Response Headers:` section so LLM agents can read them without needing to inspect hidden metadata fields
 - **In-page search** — find text on a webpage with case-insensitive matching, HTML entity awareness, and configurable context extraction
 
 From the point of view of a regular LLM usage, the html2md makes the most sense
@@ -19,6 +21,40 @@ Usage - you can just casually ask it in pi with a prompt like this:
 ```
 Can you check from github what this project from https://github.com/kulminaator/pi-http-util  is about?
 ```
+
+## Response Format
+
+The `http_fetch` tool output is a plain-text block visible to the LLM. It starts with a metadata header, followed by a `---` separator, then the body content:
+
+```
+HTTP 200 https://example.com
+Content-Type: text/html; charset=UTF-8
+Raw size: 42.1KB (43100 chars)
+Strip: html2md → 8.3KB (8480 chars)
+Lines: 312
+
+Response Headers:
+  content-type: text/html; charset=UTF-8
+  cache-control: max-age=60, public
+  server: cloudflare
+  ...
+---
+# Page Title
+
+Converted Markdown content here...
+```
+
+The tool also returns a structured `details` object with the same metadata for programmatic access:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `httpStatusCode` | `number` | The HTTP status code returned by the server |
+| `headers` | `{ key, value }[]` | All response headers as key-value pairs |
+| `contentType` | `string` | The response `Content-Type` header |
+| `requestedStripMethod` | `string` | The strip mode the caller requested |
+| `appliedStripMethod` | `string` | The strip mode that was actually applied (may differ for non-HTML) |
+
+When a non-HTML response is received and a strip mode other than `none` was requested, the result text shows `(skipped, non-HTML content)` to make the fallback transparent.
 
 ## Architecture
 
@@ -32,7 +68,12 @@ tokenize(html)  →  emitEvents(html)  →  processEvents(events)  →  markdown
 1. **`tokenizer.ts`** — Tokenizes raw HTML into a stream of text, tag, comment, and doctype tokens
 2. **`md_emitter.ts`** — Wraps the tokenizer to produce a clean event stream (`text`, `open`, `close`), filtering comments and doctypes. Defines element classification sets (skip, block, inline, void)
 3. **`md_handler.ts`** — Processes events with an element stack and dispatch table. Each element type has dedicated open/close handlers. Unknown elements are treated as block-level paragraphs. Includes output normalization
-4. **`strip.ts`** — Public API for all 5 strip modes. `stripHtmlToMd()` wires together `emitEvents()` → `processEvents()`
+4. **`strip.ts`** — Public API for all 5 strip modes. Provides `resolveStripMethod()` for Content-Type-aware fallback, `applyStrip()` for dispatch, and `stripHtmlToMd()` which wires together `emitEvents()` → `processEvents()` → `collapseBlankLines()`
+5. **`fetch.ts`** — Fetch pipeline: `executeFetch()` (HTTP fetch + header collection + strip resolution), `validateUrl()`, `buildHeaders()`. Extracted from the tool so it can be tested independently
+
+### Content-Type Safety
+
+The `resolveStripMethod(requested, contentType)` function checks whether the response `Content-Type` contains `text/html`. If not, it returns `"none"` regardless of the requested mode (unless `"none"` was already requested). This prevents HTML-specific transformations from corrupting JSON, plain text, or other non-HTML payloads.
 
 ### Tools Registered
 
@@ -47,12 +88,13 @@ tokenize(html)  →  emitEvents(html)  →  processEvents(events)  →  markdown
 .pi/extensions/http_fetch/
 ├── index.ts            # Entry point (exports default function, registers tools)
 ├── core.ts             # Barrel re-export of all pure functions
+├── fetch.ts            # Fetch pipeline (executeFetch, validateUrl, buildHeaders)
 ├── tokenizer.ts        # HTML tokenizer (Token type, tokenize generator)
 ├── entities.ts         # HTML entity decoding (named + numeric)
 ├── whitespace.ts       # Whitespace detection and collapsing
 ├── md_emitter.ts       # SAX-style event emitter (tokenize → text/open/close events)
 ├── md_handler.ts       # SAX-style event handler (events → Markdown, element stack)
-├── strip.ts            # Strip modes (none, whitespace, attributes, tags, html2md)
+├── strip.ts            # Strip modes, resolveStripMethod, applyStrip
 └── in_page_search.ts   # In-page search tool (fetch + search + context extraction)
 
 tests/http_fetch/
@@ -65,6 +107,7 @@ tests/http_fetch/
 ├── md_handler.test.ts        # Event handler (HTML → Markdown conversion)
 ├── strip.test.ts             # All strip modes + edge cases
 ├── integration.test.ts       # http_fetch HTTP integration
+├── tool.test.ts              # Tool execute pipeline (headers, fallback, response structure)
 └── in_page_search.test.ts    # in_page_search HTTP integration
 ```
 
@@ -113,7 +156,7 @@ node --experimental-strip-types tests/http_fetch/integration.test.ts
 | `processEvents() — skip elements` | script, style, head, noscript, template, slot |
 | `processEvents() — inline extras` | sub, sup, q, abbr, mark |
 | `processEvents() — entity decoding` | named entities, emoji preservation |
-| `processEvents() — edge cases` | empty input, plain text, void close tags, unclosed tags, malformed HTML, unknown elements |
+| `processEvents() — edge cases` | empty input, plain text, void close tags, unclosed tags, malformed HTML, unknown elements, blank line handling |
 | `processEvents() — complex document` | full HTML document to Markdown |
 | `processEvents() — details/summary` | collapsible sections |
 | `processEvents() — figure/figcaption` | images with captions |
@@ -126,7 +169,8 @@ node --experimental-strip-types tests/http_fetch/integration.test.ts
 | `stripTags() — edge cases` | Malformed HTML, nested scripts, special chars |
 | `stripHtmlToMd()` | HTML → Markdown conversion |
 | `stripHtmlToMd() — edge cases` | pre/code, sub/sup, q, abbr, mark, tables, emoji, etc. |
-| Integration | Local HTTP server, all strip modes, error codes, network |
+| Integration | Local HTTP server, all strip modes, Content-Type fallback, error codes, network |
+| `http_fetch tool — response structure` | executeFetch pipeline, header collection, httpStatusCode, strip fallback, validateUrl, buildHeaders |
 | `in_page_search` | Search, entity matching, case-insensitive, tag boundaries, strip modes |
 
 Each test has a **5-second timeout** to prevent hangs.
@@ -143,7 +187,8 @@ Tests are split into logical files, each independently runnable:
 | `md_emitter.test.ts` | Unit | SAX event emitter + element classification sets |
 | `md_handler.test.ts` | Unit | HTML → Markdown handler (headings, formatting, lists, tables, blockquotes, skip elements, figures, details, picture, edge cases) |
 | `strip.test.ts` | Unit | All strip modes + edge cases |
-| `integration.test.ts` | Integration | http_fetch HTTP server tests |
+| `integration.test.ts` | Integration | http_fetch HTTP server tests, Content-Type fallback, JSON/plain-text safety |
+| `tool.test.ts` | Integration | Tool execute pipeline — headers, httpStatusCode, strip fallback, response structure |
 | `in_page_search.test.ts` | Integration | Search, entities, boundaries, strip modes |
 
 - **Unit tests** — pure functions from the extension modules, no I/O
