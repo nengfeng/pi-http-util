@@ -333,6 +333,60 @@ describe("processEvents() — edge cases", () => {
     assert(result.includes("end"));
     assert(!result.includes("nested"));
   });
+
+  test("consecutive divs produce single blank line between sections", () => {
+    const result = toMd("<div>Section 1</div><div>Section 2</div>");
+    const lines = result.split("\n");
+    // Should have exactly one blank line between sections
+    const blankCount = lines.filter(l => l.trim() === "").length;
+    assert(blankCount <= 1, `Expected at most 1 blank line, got ${blankCount}: ${JSON.stringify(result)}`);
+  });
+
+  test("nested divs do not produce excessive blank lines", () => {
+    const result = toMd(
+      "<div><div><div><div>Deep content</div></div></div></div>"
+    );
+    const lines = result.split("\n");
+    const blankCount = lines.filter(l => l.trim() === "").length;
+    assert(blankCount <= 1, `Expected at most 1 blank line for nested divs, got ${blankCount}: ${JSON.stringify(result)}`);
+  });
+
+  test("nested divs with content produce clean output", () => {
+    const result = toMd(
+      `<div class="page">
+  <div class="container">
+    <div class="content">
+      <p>Article text</p>
+    </div>
+  </div>
+</div>`
+    );
+    assert(result.includes("Article text"));
+    const lines = result.split("\n");
+    const blankCount = lines.filter(l => l.trim() === "").length;
+    assert(blankCount <= 1, `Expected at most 1 blank line, got ${blankCount}: ${JSON.stringify(result)}`);
+  });
+
+  test("consecutive paragraphs produce single blank line", () => {
+    const result = toMd("<p>First</p><p>Second</p><p>Third</p>");
+    const lines = result.split("\n");
+    const blankCount = lines.filter(l => l.trim() === "").length;
+    assert(blankCount <= 2, `Expected at most 2 blank lines for 3 paragraphs, got ${blankCount}: ${JSON.stringify(result)}`);
+  });
+
+  test("no leading or trailing blank lines in output", () => {
+    const result = toMd("<div><p>Content</p></div>");
+    assert(!result.startsWith("\n"), "Should not start with blank line");
+    assert(!result.endsWith("\n"), "Should not end with blank line");
+  });
+
+  test("unknown block elements produce clean separation", () => {
+    const result = toMd("<section><article>Post</article></section>");
+    assert(result.includes("Post"));
+    const lines = result.split("\n");
+    const blankCount = lines.filter(l => l.trim() === "").length;
+    assert(blankCount <= 1, `Expected at most 1 blank line, got ${blankCount}: ${JSON.stringify(result)}`);
+  });
 });
 
 describe("processEvents() — complex document", () => {

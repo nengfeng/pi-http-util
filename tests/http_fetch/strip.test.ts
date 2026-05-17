@@ -153,14 +153,14 @@ describe("stripTags()", () => {
     assert.equal(stripTags(input), "hello");
   });
 
-  test("collapses whitespace between tags", () => {
+  test("collapses whitespace between tags, preserves line breaks", () => {
     const input = "<p>hello</p>\n\n<p>world</p>";
-    assert.equal(stripTags(input), "hello world");
+    assert.equal(stripTags(input), "hello\n\nworld");
   });
 
-  test("collapses whitespace from attributes + tags", () => {
+  test("collapses whitespace from attributes + tags, trims lines", () => {
     const input = '<div class="x">  hello  </div>';
-    assert.equal(stripTags(input), " hello ");
+    assert.equal(stripTags(input), "hello");
   });
 
   test("complex HTML page to text", () => {
@@ -203,6 +203,48 @@ describe("stripTags()", () => {
   test("self-closing tags removed", () => {
     const input = "before<img src='x'/><br/>after";
     assert.equal(stripTags(input), "before after");
+  });
+
+  test("preserves line structure from multi-line HTML", () => {
+    const input = `<div>
+  <p>First line</p>
+  <p>Second line</p>
+</div>`;
+    const result = stripTags(input);
+    assert(result.includes("First line"));
+    assert(result.includes("Second line"));
+    const lines = result.split("\n");
+    assert(lines.length >= 2, "Should preserve multiple lines");
+  });
+
+  test("collapses multiple consecutive blank lines into one", () => {
+    const input = `<p>foo</p>
+
+
+
+
+<p>bar</p>`;
+    const result = stripTags(input);
+    // Should have exactly one blank line between foo and bar
+    const lines = result.split("\n");
+    assert(lines.length === 3, `Expected 3 lines (foo, blank, bar), got ${lines.length}`);
+    assert.equal(lines[0], "foo");
+    assert.equal(lines[1], "");
+    assert.equal(lines[2], "bar");
+  });
+
+  test("removes leading and trailing blank lines", () => {
+    const input = `\n\n\n<p>content</p>\n\n\n`;
+    const result = stripTags(input);
+    assert.equal(result, "content");
+  });
+
+  test("mixed whitespace within lines is collapsed", () => {
+    const input = "<p>hello   world</p>\n<p>foo\t\tbaz</p>";
+    const result = stripTags(input);
+    assert(result.includes("hello world"));
+    assert(result.includes("foo baz"));
+    assert(!result.includes("  "), "Should not have double spaces");
   });
 
   test("script block content is discarded", () => {

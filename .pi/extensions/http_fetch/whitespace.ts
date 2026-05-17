@@ -68,3 +68,38 @@ export function collapseWhitespace(text: string): string {
 
   return result;
 }
+
+/**
+ * Collapse whitespace within each line and collapse multiple consecutive
+ * blank lines into a single blank line.
+ *
+ * "foo\n\n\n\nbar" → "foo\n\nbar"
+ * "foo   bar" → "foo bar"
+ * "foo\n\n   \n\nbar" → "foo\n\nbar"
+ *
+ * Lines are trimmed, and leading/trailing blank lines are removed.
+ */
+export function collapseWhitespacePreserveLines(text: string): string {
+  const lines = text.split("\n");
+  const result: string[] = [];
+  let prevBlank = false;
+
+  for (const line of lines) {
+    const collapsed = collapseWhitespace(line).trim();
+    if (collapsed === "") {
+      if (!prevBlank && result.length > 0) {
+        result.push("");
+      }
+      prevBlank = true;
+    } else {
+      result.push(collapsed);
+      prevBlank = false;
+    }
+  }
+
+  // Trim leading/trailing blank lines
+  while (result.length > 0 && result[0] === "") result.shift();
+  while (result.length > 0 && result[result.length - 1] === "") result.pop();
+
+  return result.join("\n");
+}

@@ -13,9 +13,36 @@
 
 import { tokenize, type Token } from "./tokenizer.ts";
 import { decodeTextEntities } from "./entities.ts";
-import { isHtmlWhitespace, collapseWhitespace } from "./whitespace.ts";
+import { isHtmlWhitespace, collapseWhitespace, collapseWhitespacePreserveLines } from "./whitespace.ts";
 import { emitEvents } from "./md_emitter.ts";
 import { processEvents } from "./md_handler.ts";
+
+/**
+ * Post-conversion filter: collapse multiple consecutive blank (or whitespace-only)
+ * lines into a single blank line, and strip leading/trailing blank lines.
+ */
+function collapseBlankLines(text: string): string {
+  const lines = text.split("\n");
+  const result: string[] = [];
+  let prevBlank = false;
+
+  for (const line of lines) {
+    const isBlank = line.trim() === "";
+    if (isBlank) {
+      if (!prevBlank && result.length > 0) {
+        result.push("");
+      }
+      prevBlank = true;
+    } else {
+      result.push(line);
+      prevBlank = false;
+    }
+  }
+
+  while (result.length > 0 && result[0].trim() === "") result.shift();
+  while (result.length > 0 && result[result.length - 1].trim() === "") result.pop();
+  return result.join("\n");
+}
 
 // ── Utility ──────────────────────────────────────────────────────────
 
@@ -98,7 +125,7 @@ export function stripTags(html: string): string {
       prevWasTag = true;
     }
   }
-  return collapseWhitespace(output);
+  return collapseWhitespacePreserveLines(output);
 }
 
 /**
@@ -111,5 +138,5 @@ export function stripTags(html: string): string {
  * - Discards content in script, style, head, meta, noscript, template, etc.
  */
 export function stripHtmlToMd(html: string): string {
-  return processEvents(emitEvents(html));
+  return collapseBlankLines(processEvents(emitEvents(html)));
 }

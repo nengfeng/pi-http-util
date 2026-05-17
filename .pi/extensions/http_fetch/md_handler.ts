@@ -637,7 +637,7 @@ function handleCloseSummary(state: HandlerState): void {
 
 function handleCloseGenericBlock(state: HandlerState): void {
   closeInlineMarkers(state);
-  ensureBlockSpacing(state);
+  state.output += "\n\n";
 }
 
 function popAndEmit(state: HandlerState, marker: string): void {

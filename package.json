@@ -1,6 +1,6 @@
 {
   "name": "pi-http-util",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "HTTP utility functions for pi",
   "main": "index.js",
   "type": "module",

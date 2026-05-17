@@ -7,6 +7,7 @@ import { runSummary } from "./test-harness.ts";
 import {
   isHtmlWhitespace,
   collapseWhitespace,
+  collapseWhitespacePreserveLines,
 } from "../../.pi/extensions/http_fetch/core.ts";
 
 describe("isHtmlWhitespace()", () => {
@@ -98,6 +99,73 @@ describe("collapseWhitespace()", () => {
 
   test("preserves non-whitespace", () => {
     assert.equal(collapseWhitespace("hello-world"), "hello-world");
+  });
+});
+
+describe("collapseWhitespacePreserveLines()", () => {
+
+  test("preserves single line", () => {
+    assert.equal(collapseWhitespacePreserveLines("hello world"), "hello world");
+  });
+
+  test("collapses multiple spaces within a line", () => {
+    assert.equal(collapseWhitespacePreserveLines("foo     bar"), "foo bar");
+  });
+
+  test("preserves single blank line between content", () => {
+    assert.equal(collapseWhitespacePreserveLines("foo\n\nbar"), "foo\n\nbar");
+  });
+
+  test("collapses multiple consecutive blank lines into one", () => {
+    assert.equal(collapseWhitespacePreserveLines("foo\n\n\n\nbar"), "foo\n\nbar");
+  });
+
+  test("collapses blank lines that contain only spaces/tabs", () => {
+    assert.equal(collapseWhitespacePreserveLines("foo\n\n   \n\t\t\n\nbar"), "foo\n\nbar");
+  });
+
+  test("removes leading blank lines", () => {
+    assert.equal(collapseWhitespacePreserveLines("\n\n\nhello"), "hello");
+  });
+
+  test("removes trailing blank lines", () => {
+    assert.equal(collapseWhitespacePreserveLines("hello\n\n\n"), "hello");
+  });
+
+  test("removes leading and trailing blank lines", () => {
+    assert.equal(collapseWhitespacePreserveLines("\n\nfoo\n\nbar\n\n"), "foo\n\nbar");
+  });
+
+  test("trims whitespace on each line", () => {
+    assert.equal(collapseWhitespacePreserveLines("  hello  \n  world  "), "hello\nworld");
+  });
+
+  test("empty string returns empty string", () => {
+    assert.equal(collapseWhitespacePreserveLines(""), "");
+  });
+
+  test("only blank lines returns empty string", () => {
+    assert.equal(collapseWhitespacePreserveLines("\n\n  \n\n"), "");
+  });
+
+  test("preserves multiple content lines", () => {
+    const input = "line1\nline2\nline3";
+    assert.equal(collapseWhitespacePreserveLines(input), "line1\nline2\nline3");
+  });
+
+  test("preserves nbsp as whitespace within lines", () => {
+    assert.equal(collapseWhitespacePreserveLines("foo\u00A0\u00A0bar"), "foo bar");
+  });
+
+  test("complex multi-line with mixed whitespace", () => {
+    const input = "  hello   world  \n\n\n  foo\t\tbaz  \n\n\n\n  end  ";
+    const result = collapseWhitespacePreserveLines(input);
+    assert.equal(result, "hello world\n\nfoo baz\n\nend");
+  });
+
+  test("single blank line between three content sections", () => {
+    const input = "a\n\nb\n\nc";
+    assert.equal(collapseWhitespacePreserveLines(input), "a\n\nb\n\nc");
   });
 });
 

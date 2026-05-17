@@ -16,7 +16,7 @@ export type { Token, Attribute } from "./tokenizer.ts";
 export { decodeHtmlEntity, decodeEntity, decodeTextEntities } from "./entities.ts";
 
 // Whitespace
-export { isHtmlWhitespace, collapseWhitespace } from "./whitespace.ts";
+export { isHtmlWhitespace, collapseWhitespace, collapseWhitespacePreserveLines } from "./whitespace.ts";
 
 // Strip modes
 export {
