@@ -13,7 +13,8 @@ Examples:
 Give me an overview of the project at https://github.com/kulminaator/pi-http-util
 ```
 or (your LLM most likely knows the addresses of news pages anyway)
-```Find me the first 5 headlines from the news today
+```
+Find me the first 5 headlines from the news today
 ```
 or
 ```
