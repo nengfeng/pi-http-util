@@ -8,12 +8,23 @@ before passing it to the LLM.
 
 Just tell the LLM to do something related to http, if your model has tool usage knowledge everything else is automatic.
 
-e.g.
-`Give me an overview of the project at https://github.com/kulminaator/pi-http-util`
+Examples:
+```
+Give me an overview of the project at https://github.com/kulminaator/pi-http-util
+```
 or (your LLM most likely knows the addresses of news pages anyway)
-`Find me the first 5 headlines from the news today`
+```Find me the first 5 headlines from the news today
+```
 or
-`Using our tools, make a http post request with json content {"question": "who is there"} against the server listening on localhost on port 9000`
+```
+Using our tools, make a http post request with json content {"question": "who is there"} against the server listening on localhost on port 9000
+```
+
+NB! llm might also invoke this on it's own when it feels the need to look something up.
+If you ask it something like this:
+```
+What are the latest changes that were done to threejs?
+```
 
 ## Installation
 
