@@ -384,6 +384,24 @@ export async function runTests() {
       assert.equal(parsed.message, "hello");
       assert.equal(parsed.status, "ok");
     });
+
+    test("resolveStripMethod treats application/xhtml+xml as HTML", () => {
+      assert.equal(
+        resolveStripMethod("html2md" as any, "application/xhtml+xml"),
+        "html2md",
+      );
+      assert.equal(
+        resolveStripMethod("tags" as any, "application/xhtml+xml; charset=utf-8"),
+        "tags",
+      );
+    });
+
+    test("resolveStripMethod treats text/html with charset as HTML", () => {
+      assert.equal(
+        resolveStripMethod("html2md" as any, "text/html; charset=utf-8"),
+        "html2md",
+      );
+    });
   });
 
   await stopServer();

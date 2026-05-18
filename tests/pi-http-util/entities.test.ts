@@ -165,6 +165,36 @@ describe("decodeTextEntities()", () => {
   });
 });
 
+describe("decodeHtmlEntity() — whitespace entities", () => {
+
+  test("ensp entity decodes", () => {
+    assert.equal(decodeHtmlEntity("ensp"), "\u2002");
+  });
+
+  test("emsp entity decodes", () => {
+    assert.equal(decodeHtmlEntity("emsp"), "\u2003");
+  });
+
+  test("thinsp entity decodes", () => {
+    assert.equal(decodeHtmlEntity("thinsp"), "\u2009");
+  });
+
+  test("zwsp entity decodes", () => {
+    assert.equal(decodeHtmlEntity("zwsp"), "\u200B");
+  });
+});
+
+describe("decodeHtmlEntity() — regression tests", () => {
+
+  test("amacr (not aamacr) decodes correctly", () => {
+    assert.equal(decodeHtmlEntity("amacr"), "\u0101");
+  });
+
+  test("old aamacr key does not exist", () => {
+    assert.equal(decodeHtmlEntity("aamacr"), null);
+  });
+});
+
 describe("entities — edge cases", () => {
 
   test("entity name too long (>10 chars) is not decoded", () => {
@@ -173,6 +203,21 @@ describe("entities — edge cases", () => {
 
   test("numeric entity with value 0 is rejected", () => {
     assert.equal(decodeEntity("&#0;", 0), null);
+  });
+
+  test("numeric entity slice boundary does not include semicolon", () => {
+    // Regression: numEnd - 1 || numEnd could include the semicolon
+    const result = decodeEntity("&#65;rest", 0);
+    assert(result !== null);
+    assert.equal(result.char, "A");
+    assert.equal(result.consumed, 5);
+  });
+
+  test("hex entity slice boundary does not include semicolon", () => {
+    const result = decodeEntity("&#x41;rest", 0);
+    assert(result !== null);
+    assert.equal(result.char, "A");
+    assert.equal(result.consumed, 6);
   });
 
   test("numeric entity with very large value produces valid char", () => {

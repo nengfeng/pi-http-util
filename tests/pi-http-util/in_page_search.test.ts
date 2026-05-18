@@ -102,6 +102,12 @@ async function startServer(): Promise<void> {
         return;
       }
 
+      if (url.pathname === "/search-json") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ message: "hello world", status: "ok" }));
+        return;
+      }
+
       res.writeHead(404);
       res.end("Unknown route");
     });
@@ -359,6 +365,19 @@ export async function runTests() {
       );
       assert.equal(result.isError, true);
       assert.equal(result.status, 500);
+    });
+
+    test("JSON response with strip=html2md falls back to none (content unchanged)", async () => {
+      const result = await inPageSearch(
+        { url: `${baseUrl}/search-json`, search: "hello world", context_limit: 50, strip: "html2md" },
+        undefined,
+      );
+      assert.equal(result.isError, false);
+      assert(result.results.length >= 1);
+      // JSON should not be mangled by html2md
+      const snippet = result.results[0].snippet;
+      assert(snippet.includes("hello world"));
+      assert(snippet.includes("status"));
     });
 
     test("nonexistent host throws error", async () => {

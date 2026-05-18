@@ -96,8 +96,9 @@ export async function executeFetch(params: FetchParams): Promise<FetchResult> {
 
   if (body && (method === "POST" || method === "PUT" || method === "PATCH")) {
     fetchOptions.body = body;
+    // Clone headers to avoid mutating the caller's object
     if (!headers["Content-Type"]) {
-      (headers as Record<string, string>)["Content-Type"] = "text/plain; charset=utf-8";
+      fetchOptions.headers = { ...headers, "Content-Type": "text/plain; charset=utf-8" };
     }
   }
 

@@ -18,15 +18,13 @@ import {
   stripAttributes,
   stripTags,
   stripHtmlToMd,
+  resolveStripMethod,
 } from "./strip.ts";
+import { buildHeaders } from "./fetch.ts";
 
 // ── Defaults ─────────────────────────────────────────────────────────
 const DEFAULT_CONTEXT_LIMIT = 100;
 const CONTEXT_MULTIPLIER = 5; // grab 5x context before stripping
-
-// ── Chrome User-Agent (same as index.ts) ─────────────────────────────
-const CHROME_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -78,7 +76,9 @@ function buildDecodedMap(html: string): { decoded: string; positions: number[] }
 
     const tagContent = html.slice(i + 1, gtIdx);
 
-    // Check if this is a skip element (script/style)
+    // Skip <script> and <style> content (non-visible).
+    // Note: <noscript> is NOT skipped here — its content is visible when JS is disabled.
+    // This differs from the tokenizer's skip list which is for HTML-to-Markdown conversion.
     if (tagContent.startsWith("/")) {
       // Closing tag
       const closeName = tagContent.slice(1).split(/\s/)[0].toLowerCase();
@@ -253,24 +253,10 @@ export async function inPageSearch(
   isError: boolean;
 }> {
   const { url, search, context_limit, strip } = params;
-  const stripFn = STRIP_FNS[strip] ?? stripHtmlToMd;
   const expandChars = context_limit * CONTEXT_MULTIPLIER;
 
   // ── Build headers ────────────────────────────────────────────────
-  const headers: Record<string, string> = {
-    "User-Agent": CHROME_UA,
-    Accept:
-      "text/html,application/xhtml+xml,application/xml;q=0.9," +
-      "image/avif,image/webp,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
-    Connection: "keep-alive",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Sec-Fetch-User": "?1",
-    "Upgrade-Insecure-Requests": "1",
-  };
+  const headers = buildHeaders();
 
   // ── Fetch ────────────────────────────────────────────────────────
   let responseText: string;
@@ -299,6 +285,10 @@ export async function inPageSearch(
   }
 
   const rawBytes = new TextEncoder().encode(responseText).length;
+
+  // ── Resolve strip mode based on Content-Type ─────────────────────
+  const resolvedStrip = resolveStripMethod(strip as any, contentType);
+  const stripFn = STRIP_FNS[resolvedStrip] ?? stripNone;
 
   // ── Build decoded text map ───────────────────────────────────────
   const { decoded, positions } = buildDecodedMap(responseText);
@@ -344,7 +334,7 @@ export async function inPageSearch(
       );
 
       // If strip=none, ensure we don't cut inside HTML tags
-      if (strip === "none") {
+      if (resolvedStrip === "none") {
         // Adjust beforeStart: if inside a tag, back up to tag start
         for (let p = beforeStart - 1; p >= 0; p--) {
           if (stripped[p] === ">") break;

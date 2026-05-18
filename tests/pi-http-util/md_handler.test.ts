@@ -101,6 +101,17 @@ describe("processEvents() — links and images", () => {
     assert(result.includes("not a link"));
     assert(!result.includes("[not a link]"));
   });
+
+  test("link with complex href closes properly", () => {
+    const result = toMd('<a href="https://example.com/path?q=1&foo=bar">link</a>');
+    assert(result.includes("[link](https://example.com/path?q=1&foo=bar)"));
+  });
+
+  test("nested link tags handled gracefully", () => {
+    const result = toMd('<a href="/1">outer<a href="/2">inner</a></a>');
+    assert(result.includes("outer"));
+    assert(result.includes("inner"));
+  });
 });
 
 describe("processEvents() — lists", () => {
@@ -263,6 +274,18 @@ describe("processEvents() — inline formatting extras", () => {
     assert(result.includes("HyperText Markup Language"));
   });
 
+  test("abbr with unclosed nested code tag: title still emitted", () => {
+    // Regression: old code blindly popped top marker (backtick) instead of abbr title
+    const result = toMd('<abbr title="HyperText Markup Language"><code>HTML</abbr>');
+    assert(result.includes("(HyperText Markup Language)"), `Expected title, got: ${JSON.stringify(result)}`);
+  });
+
+  test("time with unclosed nested bold tag: datetime still emitted", () => {
+    // Regression: old code only checked top marker, silently dropped datetime
+    const result = toMd('<time datetime="2024-01-01"><b>New Year</time>');
+    assert(result.includes("(2024-01-01)"), `Expected datetime, got: ${JSON.stringify(result)}`);
+  });
+
   test("mark tag (highlight)", () => {
     assert(toMd("<p>Important: <mark>read this</mark></p>").includes("==read this=="));
   });
@@ -277,6 +300,29 @@ describe("processEvents() — entity decoding", () => {
 
   test("emoji in content preserved", () => {
     assert(toMd("<p>Hello 😀 world</p>").includes("Hello 😀 world"));
+  });
+});
+
+describe("processEvents() — template syntax preserved", () => {
+
+  test("Angular {{variable}} syntax is preserved", () => {
+    const result = toMd("<p>Hello {{userName}}</p>");
+    assert(result.includes("{{userName}}"), `Expected {{userName}} in output: ${JSON.stringify(result)}`);
+  });
+
+  test("Vue {{ expression }} syntax is preserved", () => {
+    const result = toMd("<p>Count: {{ count }}</p>");
+    assert(result.includes("{{ count }}"), `Expected {{ count }} in output: ${JSON.stringify(result)}`);
+  });
+
+  test("Handlebars {{#each}} syntax is preserved", () => {
+    const result = toMd("<p>{{#each items}}Item{{/each}}</p>");
+    assert(result.includes("{{#each items}}"), `Expected {{#each items}} in output: ${JSON.stringify(result)}`);
+  });
+
+  test("Math {{x}} notation is preserved", () => {
+    const result = toMd("<p>The set is {{x | x > 0}}</p>");
+    assert(result.includes("{{x | x > 0}}"), `Expected {{x | x > 0}} in output: ${JSON.stringify(result)}`);
   });
 });
 
@@ -305,6 +351,18 @@ describe("processEvents() — edge cases", () => {
     assert(result.includes("hello"));
     assert(result.includes("world"));
     assert(result.includes("goodbye"));
+  });
+
+  test("mismatched tags: span inside div closed by /div", () => {
+    const result = toMd("<div><span>inner</div>");
+    assert(result.includes("inner"));
+    // Should not crash or produce garbage
+    assert(typeof result === "string");
+  });
+
+  test("deeply mismatched tags handled gracefully", () => {
+    const result = toMd("<div><p><span>text</div></p></span>");
+    assert(result.includes("text"));
   });
 
   test("div creates block separation", () => {
@@ -440,6 +498,45 @@ describe("processEvents() — details/summary", () => {
     assert(result.includes("Click me"));
     assert(result.includes("Hidden content"));
   });
+
+  test("paragraph inside details closes summary state", () => {
+    const result = toMd("<details><summary>Toggle</summary><p>Body text</p></details>");
+    assert(result.includes("Toggle"));
+    assert(result.includes("Body text"));
+    // Body text should not be bold-wrapped (summary state should be closed)
+  });
+
+  test("br inside summary closes details state", () => {
+    const result = toMd("<details><summary>Line one<br>Line two</summary><p>Content</p></details>");
+    assert(result.includes("Line one"));
+    assert(result.includes("Line two"));
+    assert(result.includes("Content"));
+  });
+
+  test("pre after details does not leak summary bold formatting", () => {
+    const result = toMd("<details><summary>Toggle</summary><pre>code here</pre></details>");
+    assert(result.includes("code here"));
+    // The pre content should not be wrapped in ** from summary
+    assert(!result.includes("**code here"), `Expected no bold on code, got: ${JSON.stringify(result)}`);
+  });
+
+  test("blockquote after details does not leak summary bold formatting", () => {
+    const result = toMd("<details><summary>Toggle</summary><blockquote><p>quoted</p></blockquote></details>");
+    assert(result.includes("quoted"));
+    assert(!result.includes("**quoted"), `Expected no bold on quote, got: ${JSON.stringify(result)}`);
+  });
+
+  test("ul after details does not leak summary bold formatting", () => {
+    const result = toMd("<details><summary>Toggle</summary><ul><li>item</li></ul></details>");
+    assert(result.includes("item"));
+    assert(!result.includes("**item"), `Expected no bold on list item, got: ${JSON.stringify(result)}`);
+  });
+
+  test("table after details does not leak summary bold formatting", () => {
+    const result = toMd("<details><summary>Toggle</summary><table><tr><td>cell</td></tr></table></details>");
+    assert(result.includes("cell"));
+    assert(!result.includes("**cell"), `Expected no bold on table cell, got: ${JSON.stringify(result)}`);
+  });
 });
 
 describe("processEvents() — figure/figcaption", () => {
@@ -450,6 +547,25 @@ describe("processEvents() — figure/figcaption", () => {
     );
     assert(result.includes("![A photo](photo.jpg)"));
     assert(result.includes("A nice photo"));
+  });
+
+  test("figcaption does not interfere with details/summary", () => {
+    const result = toMd(
+      '<figure><img src="x.jpg" alt="img"><figcaption>Caption</figcaption></figure>' +
+      '<details><summary>Toggle</summary><p>Content</p></details>'
+    );
+    assert(result.includes("Caption"));
+    assert(result.includes("Toggle"));
+    assert(result.includes("Content"));
+    // Summary text should be bold-wrapped, figcaption should not
+    assert(result.includes("**Toggle**"));
+  });
+
+  test("figcaption text is collected and rendered by figure flush", () => {
+    const result = toMd(
+      '<figure><p>Fig text</p><figcaption>My caption</figcaption></figure>'
+    );
+    assert(result.includes("My caption"));
   });
 });
 

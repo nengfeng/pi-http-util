@@ -157,11 +157,12 @@ export function* tokenize(html: string): Generator<Token> {
       if (start < len) start++; // skip >
       const tagName = name.toLowerCase();
 
-      // ── Script / style: emit tag, then scan for closing tag ──────
-      // Content inside <script> and <style> is NOT parsed as HTML.
+      // ── Script / style / textarea: emit tag, then scan for closing tag ──
+      // Content inside <script>, <style>, and <textarea> is NOT parsed as HTML.
       // This prevents template scripts (e.g. <script type="text/ng-template">
       // containing full HTML markup) from confusing depth-based skip logic.
-      if (!isClosing && (tagName === "script" || tagName === "style")) {
+      // <textarea> content is raw text, not HTML markup.
+      if (!isClosing && (tagName === "script" || tagName === "style" || tagName === "textarea")) {
         yield { kind: "tag", name: tagName, isClosing: false, selfClosing, attributes };
         const closeTag = `</${tagName}>`;
         const closeIdx = html.toLowerCase().indexOf(closeTag, i);

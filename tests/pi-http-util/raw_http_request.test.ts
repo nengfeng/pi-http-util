@@ -164,6 +164,7 @@ async function startServer(): Promise<void> {
             "Content-Type": "text/plain",
             "X-Request-Method": req.method || "unknown",
             "X-Body-Length": String(body.length),
+            "X-Request-Content-Type": req.headers["content-type"] || "none",
           });
           res.end(body);
         });
@@ -243,6 +244,39 @@ export async function runTests() {
       assert.equal(result.error, null);
       assert.equal(result.http_response_code, 200);
       assert.equal(result.http_response_body, '{"key":"value"}');
+    });
+
+    test("POST auto-sets Content-Type when not provided", async () => {
+      const result = await executeRawRequest({
+        http_url: `${baseUrl}/echo`,
+        http_method: "POST",
+        http_request_body: "test body",
+        http_request_timeout: 300,
+        http_verify_ssl: true,
+      });
+      assert.equal(result.error, null);
+      const ctHeader = result.http_response_headers.find(
+        h => h.key.toLowerCase() === "x-request-content-type",
+      );
+      assert(ctHeader != null, "Should have X-Request-Content-Type echo header");
+      assert(ctHeader.value.includes("text/plain"), `Expected auto Content-Type, got: ${ctHeader.value}`);
+    });
+
+    test("POST preserves custom Content-Type when provided", async () => {
+      const result = await executeRawRequest({
+        http_url: `${baseUrl}/echo`,
+        http_method: "POST",
+        http_request_body: '{"json":true}',
+        http_request_headers: { "Content-Type": "application/json" },
+        http_request_timeout: 300,
+        http_verify_ssl: true,
+      });
+      assert.equal(result.error, null);
+      const ctHeader = result.http_response_headers.find(
+        h => h.key.toLowerCase() === "x-request-content-type",
+      );
+      assert(ctHeader != null);
+      assert(ctHeader.value.includes("application/json"), `Expected application/json, got: ${ctHeader.value}`);
     });
 
     test("POST with body file", async () => {
@@ -413,7 +447,7 @@ export async function runTests() {
       assert(result.http_response_body.includes('"data"'));
     });
 
-    test("body file takes precedence over inline body", async () => {
+    test("both body and body file returns error", async () => {
       const tmp = tmpFile("prec-body");
       await fs.writeFile(tmp, "from file");
       try {
@@ -425,8 +459,8 @@ export async function runTests() {
           http_request_timeout: 300,
           http_verify_ssl: true,
         });
-        assert.equal(result.error, null);
-        assert.equal(result.http_response_body, "from file");
+        assert(result.error != null);
+        assert(result.error!.includes("both"), `Expected error about both, got: ${result.error}`);
       } finally {
         await fs.unlink(tmp);
       }

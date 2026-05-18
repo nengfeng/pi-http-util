@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import { tokenize } from "../../.pi/extensions/pi-http-util/core.ts";
+import { tokenize, type Token } from "../../.pi/extensions/pi-http-util/core.ts";
 
 // ── Counters (shared across all test files via module singleton) ─────
 
@@ -56,7 +56,7 @@ export async function describe(name: string, fn: () => void | Promise<void>) {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-export function collectTokens(html: string): ReturnType<typeof tokenize>[yield] {
+export function collectTokens(html: string): Token[] {
   return [...tokenize(html)];
 }
 

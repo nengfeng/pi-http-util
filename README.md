@@ -91,8 +91,8 @@ pi -e git:github.com/kulminaator/pi-http-util
 
 | Tool | Description |
 |------|-------------|
-| `http_fetch` | Fetch a URL with configurable strip mode, truncation limits, and strategy |
-| `in_page_search` | Search a webpage for text, return matching snippets with surrounding context |
+| `http_fetch` | Fetch a URL with configurable HTTP method, headers, body, redirects, strip mode, truncation limits, and strategy |
+| `in_page_search` | Search a webpage for text with configurable strip mode (`html2md`, `tags`, `attributes`, `whitespace`, `none`), return matching snippets with surrounding context |
 | `raw_http_request` | Send raw HTTP requests with no content stripping, file I/O, and size limits |
 
 
@@ -121,7 +121,7 @@ Tests in `tests`
 
 ## Running the Tests
 
-Requires **Node.js ≥ 24** (for `--experimental-strip-types` to run TypeScript without compilation).
+Requires **Node.js ≥ 22** (for `--experimental-strip-types` to run TypeScript without compilation).
 
 ```bash
 # Run all tests (recommended)

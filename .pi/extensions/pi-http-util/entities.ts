@@ -23,6 +23,8 @@ const ENTITIES: Readonly<Record<string, string>> = {
   // ── Whitespace ────────────────────────────────────────────────
   ensp: "\u2002", emsp: "\u2003", thinsp: "\u2009", zwsp: "\u200B",
   tab: "\t", newline: "\n",
+  // ── Additional common entities ────────────────────────────────
+  zwj: "\u200D", zwnj: "\u200C",
   // ── Latin-1 Supplement (U+0080–U+00FF) ────────────────────────
   Agrave: "\u00C0", Aacute: "\u00C1", Acirc: "\u00C2", Atilde: "\u00C3",
   Auml: "\u00C4", Aring: "\u00C5", AElig: "\u00C6", Ccedil: "\u00C7",
@@ -44,7 +46,7 @@ const ENTITIES: Readonly<Record<string, string>> = {
   thorn: "\u00FE", yuml: "\u00FF",
   oelig: "\u0153", szlig: "\u00DF",
   // ── Latin Extended (common accented chars) ────────────────────
-  Amacr: "\u0100", aamacr: "\u0101",
+  Amacr: "\u0100", amacr: "\u0101",
   Abreve: "\u0102", abreve: "\u0103",
   Aogonek: "\u0104", aogonek: "\u0105",
   Cacute: "\u0106", cacute: "\u0107",
@@ -169,12 +171,12 @@ export function decodeEntity(text: string, pos: number): { char: string; consume
       numEnd = pos + 3;
       while (numEnd < end && "0123456789abcdefABCDEF".includes(text[numEnd])) numEnd++;
       if (numEnd < text.length && text[numEnd] === ";") numEnd++;
-      value = parseInt(text.slice(pos + 3, numEnd - 1 || numEnd), 16);
+      value = parseInt(text.slice(pos + 3, numEnd - 1 >= pos + 3 ? numEnd - 1 : numEnd), 16);
     } else {
       // Decimal
       while (numEnd < end && "0123456789".includes(text[numEnd])) numEnd++;
       if (numEnd < text.length && text[numEnd] === ";") numEnd++;
-      value = parseInt(text.slice(pos + 2, numEnd - 1 || numEnd), 10);
+      value = parseInt(text.slice(pos + 2, numEnd - 1 >= pos + 2 ? numEnd - 1 : numEnd), 10);
     }
     if (!isNaN(value) && value > 0) {
       return { char: String.fromCodePoint(value), consumed: numEnd - pos };

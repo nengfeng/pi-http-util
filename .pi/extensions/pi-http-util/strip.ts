@@ -29,7 +29,8 @@ export function resolveStripMethod(
   contentType: string,
 ): StripMode {
   if (requested === "none") return "none";
-  const isHtml = contentType.toLowerCase().includes("text/html");
+  const lower = contentType.toLowerCase();
+  const isHtml = lower.includes("text/html") || lower.includes("application/xhtml+xml");
   return isHtml ? requested : "none";
 }
 
@@ -45,33 +46,6 @@ export function applyStrip(text: string, mode: StripMode): string {
     html2md: stripHtmlToMd,
   };
   return (stripFns[mode] ?? stripNone)(text);
-}
-
-/**
- * Post-conversion filter: collapse multiple consecutive blank (or whitespace-only)
- * lines into a single blank line, and strip leading/trailing blank lines.
- */
-function collapseBlankLines(text: string): string {
-  const lines = text.split("\n");
-  const result: string[] = [];
-  let prevBlank = false;
-
-  for (const line of lines) {
-    const isBlank = line.trim() === "";
-    if (isBlank) {
-      if (!prevBlank && result.length > 0) {
-        result.push("");
-      }
-      prevBlank = true;
-    } else {
-      result.push(line);
-      prevBlank = false;
-    }
-  }
-
-  while (result.length > 0 && result[0].trim() === "") result.shift();
-  while (result.length > 0 && result[result.length - 1].trim() === "") result.pop();
-  return result.join("\n");
 }
 
 // ── Utility ──────────────────────────────────────────────────────────
@@ -168,5 +142,6 @@ export function stripTags(html: string): string {
  * - Discards content in script, style, head, meta, noscript, template, etc.
  */
 export function stripHtmlToMd(html: string): string {
-  return collapseBlankLines(processEvents(emitEvents(html)));
+  // normalizeOutput (inside processEvents) already handles blank-line collapsing
+  return processEvents(emitEvents(html));
 }

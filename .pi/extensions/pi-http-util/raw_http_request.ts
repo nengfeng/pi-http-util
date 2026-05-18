@@ -139,6 +139,11 @@ export async function executeRawRequest(
   const headers = buildRawHeaders(http_request_headers);
 
   // ── Resolve request body ─────────────────────────────────────────
+  if (http_request_body && http_request_body_file) {
+    result.error = "Cannot specify both http_request_body and http_request_body_file";
+    return result;
+  }
+
   let body: string | undefined = http_request_body;
   if (http_request_body_file) {
     try {
@@ -158,6 +163,13 @@ export async function executeRawRequest(
 
   if (body && !isBodylessMethod(http_method)) {
     fetchOptions.body = body;
+    // Auto-set Content-Type if not already provided
+    const hasContentType = Object.keys(headers).some(
+      k => k.toLowerCase() === "content-type",
+    );
+    if (!hasContentType) {
+      (headers as Record<string, string>)["Content-Type"] = "text/plain; charset=utf-8";
+    }
   }
 
   // ── Fetch ────────────────────────────────────────────────────────

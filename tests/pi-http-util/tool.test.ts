@@ -194,6 +194,23 @@ export async function runTests() {
       assert.equal(headers["X-Custom"], "value");
       assert(headers["User-Agent"].includes("Chrome"), "default headers preserved");
     });
+
+    test("executeFetch does not mutate caller's headers object", async () => {
+      const sharedHeaders = { "User-Agent": "test", "Accept": "*/*" };
+      const originalKeys = Object.keys(sharedHeaders).sort().join(",");
+      await executeFetch({
+        url: `${baseUrl}/html`,
+        method: "POST",
+        headers: sharedHeaders,
+        body: "test body",
+        followRedirects: true,
+        strip: "none" as any,
+        signal: AbortSignal.timeout(5000),
+      });
+      const afterKeys = Object.keys(sharedHeaders).sort().join(",");
+      assert.equal(originalKeys, afterKeys, `Headers mutated: was ${originalKeys}, now ${afterKeys}`);
+      assert(!("Content-Type" in sharedHeaders), "Content-Type should not be added to caller's object");
+    });
   });
 
   await stopServer();

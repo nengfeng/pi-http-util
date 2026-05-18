@@ -69,6 +69,7 @@ interface HandlerState {
   inDetails: boolean;
   figcaptionText: string;
   inFigure: boolean;
+  inFigcaption: boolean;
   pictureSrc: string;
   pictureAlt: string;
   inPicture: boolean;
@@ -97,6 +98,7 @@ function createHandlerState(): HandlerState {
     inDetails: false,
     figcaptionText: "",
     inFigure: false,
+    inFigcaption: false,
     pictureSrc: "",
     pictureAlt: "",
     inPicture: false,
@@ -147,16 +149,22 @@ function emitListMarker(list: { ordered: boolean; depth: number }): string {
 
 // ── Flush Helpers ────────────────────────────────────────────────────
 
+/** Push current cells to tableRows as a formatted row (with separator if needed). */
+function flushCurrentCells(state: HandlerState): void {
+  if (state.currentCells.length === 0) return;
+  state.tableRows.push("| " + state.currentCells.join(" | ") + " |");
+  if (!state.tableHeaderDone) {
+    state.tableRows.push(
+      "|" + state.currentCells.map(() => " --- ").join("|") + "|"
+    );
+    state.tableHeaderDone = true;
+  }
+  state.currentCells.length = 0;
+}
+
 function flushTable(state: HandlerState): void {
-  if (state.inTr && state.currentCells.length > 0) {
-    state.tableRows.push("| " + state.currentCells.join(" | ") + " |");
-    if (!state.tableHeaderDone) {
-      state.tableRows.push(
-        "|" + state.currentCells.map(() => " --- ").join("|") + "|"
-      );
-      state.tableHeaderDone = true;
-    }
-    state.currentCells.length = 0;
+  if (state.inTr) {
+    flushCurrentCells(state);
     state.inTr = false;
   }
   if (state.tableCaption) {
@@ -204,6 +212,7 @@ function flushFigure(state: HandlerState): void {
   }
   state.inFigure = false;
   state.figcaptionText = "";
+  state.inFigcaption = false;
 }
 
 function flushDetails(state: HandlerState): void {
@@ -254,13 +263,12 @@ function handleText(state: HandlerState, data: string): void {
   if (state.skipDepth > 0) return;
 
   let text = decodeTextEntities(data);
-  text = text.replace(/\{\{[^}]*\}\}/g, "").replace(/\{#[^#]*#\}/g, "");
 
   if (state.inPre) {
     state.preContent += text;
   } else if (state.inTable && state.inTr) {
     state.currentCells.push(text.trim());
-  } else if (state.inFigure && !state.inPicture) {
+  } else if (state.inFigcaption) {
     state.figcaptionText += text;
   } else {
     // Text goes to output directly (including inside <summary>)
@@ -282,6 +290,7 @@ function handleOpenP(state: HandlerState): void {
   flushTable(state);
   flushPicture(state);
   flushFigure(state);
+  flushDetails(state);
   const insideLi = isInside(state, "li");
   if (!insideLi) {
     ensureBlockSpacing(state);
@@ -290,6 +299,7 @@ function handleOpenP(state: HandlerState): void {
 
 function handleOpenBr(state: HandlerState): void {
   closeInlineMarkers(state);
+  flushDetails(state);
   state.output += "\n\n";
 }
 
@@ -310,6 +320,7 @@ function handleOpenPre(state: HandlerState): void {
   flushTable(state);
   flushPicture(state);
   flushFigure(state);
+  flushDetails(state);
   flushPre(state);
   ensureBlockSpacing(state);
   state.inPre = true;
@@ -321,6 +332,7 @@ function handleOpenBlockquote(state: HandlerState): void {
   flushTable(state);
   flushPicture(state);
   flushFigure(state);
+  flushDetails(state);
   ensureBlockSpacing(state);
   state.output += "> ";
   state.noBlockSpacing = true;
@@ -332,6 +344,7 @@ function handleOpenTable(state: HandlerState): void {
   flushTable(state);
   flushPicture(state);
   flushFigure(state);
+  flushDetails(state);
   ensureBlockSpacing(state);
   state.inTable = true;
 }
@@ -347,6 +360,7 @@ function handleOpenUl(state: HandlerState): void {
   flushTable(state);
   flushPicture(state);
   flushFigure(state);
+  flushDetails(state);
   ensureBlockSpacing(state);
   state.listStack.push({ ordered: false, depth: state.listStack.length });
 }
@@ -357,6 +371,7 @@ function handleOpenOl(state: HandlerState): void {
   flushTable(state);
   flushPicture(state);
   flushFigure(state);
+  flushDetails(state);
   ensureBlockSpacing(state);
   state.listStack.push({ ordered: true, depth: state.listStack.length });
 }
@@ -371,11 +386,6 @@ function handleOpenLi(state: HandlerState): void {
 }
 
 function handleOpenA(state: HandlerState, href: string): void {
-  if (isAtBlockLevel(state) && state.inlineMarkers.length === 0) {
-    // Defer: at block level, can't inline link yet
-    // We'll handle this by just opening inline and closing at </a>
-    // For simplicity, treat all links as inline
-  }
   state.inlineMarkers.push(`](${href})`);
   state.output += "[";
 }
@@ -459,7 +469,7 @@ function handleOpenFigure(state: HandlerState): void {
 }
 
 function handleOpenFigcaption(state: HandlerState): void {
-  state.inSummary = true;
+  state.inFigcaption = true;
 }
 
 function handleOpenDetails(state: HandlerState): void {
@@ -505,31 +515,12 @@ function handleCloseBlockquote(state: HandlerState): void {
 }
 
 function handleCloseTable(state: HandlerState): void {
-  if (state.inTr && state.currentCells.length > 0) {
-    state.tableRows.push("| " + state.currentCells.join(" | ") + " |");
-    if (!state.tableHeaderDone) {
-      state.tableRows.push(
-        "|" + state.currentCells.map(() => " --- ").join("|") + "|"
-      );
-      state.tableHeaderDone = true;
-    }
-    state.currentCells.length = 0;
-    state.inTr = false;
-  }
+  if (state.inTr) flushCurrentCells(state);
   flushTable(state);
 }
 
 function handleCloseTr(state: HandlerState): void {
-  if (state.currentCells.length > 0) {
-    state.tableRows.push("| " + state.currentCells.join(" | ") + " |");
-    if (!state.tableHeaderDone) {
-      state.tableRows.push(
-        "|" + state.currentCells.map(() => " --- ").join("|") + "|"
-      );
-      state.tableHeaderDone = true;
-    }
-    state.currentCells.length = 0;
-  }
+  flushCurrentCells(state);
   state.inTr = false;
 }
 
@@ -555,14 +546,17 @@ function popMatchingList(state: HandlerState, ordered: boolean): void {
 
 function handleCloseLi(state: HandlerState): void {
   closeInlineMarkers(state);
-  state.output = state.output.replace(/[\s]+$/, "");
+  state.output = state.output.trimEnd();
   state.output += "\n";
 }
 
 function handleCloseA(state: HandlerState): void {
-  if (state.inlineMarkers.length > 0 &&
-      state.inlineMarkers[state.inlineMarkers.length - 1].startsWith("](")) {
-    state.output += state.inlineMarkers.pop()!;
+  if (state.inlineMarkers.length > 0) {
+    const top = state.inlineMarkers[state.inlineMarkers.length - 1];
+    // Link markers are always of the form ](href)
+    if (top.startsWith("](") && top.endsWith(")")) {
+      state.output += state.inlineMarkers.pop()!;
+    }
   }
 }
 
@@ -591,9 +585,9 @@ function handleCloseSup(state: HandlerState): void {
 }
 
 function handleCloseAbbr(state: HandlerState): void {
-  if (state.inlineMarkers.length > 0) {
-    state.output += state.inlineMarkers.pop()!;
-  }
+  // Search for the abbr marker (starts with " (") from the top.
+  // Pop everything above it first (in reverse), then pop and emit the abbr marker.
+  popAndEmitMatching(state, m => m.startsWith(" (") && m.endsWith(")"));
 }
 
 function handleCloseMark(state: HandlerState): void {
@@ -605,10 +599,37 @@ function handleCloseQ(state: HandlerState): void {
 }
 
 function handleCloseTime(state: HandlerState): void {
-  if (state.inlineMarkers.length > 0 &&
-      state.inlineMarkers[state.inlineMarkers.length - 1].startsWith(" (")) {
+  // Search for the time marker (starts with " (") from the top.
+  // Pop everything above it first (in reverse), then pop and emit the time marker.
+  popAndEmitMatching(state, m => m.startsWith(" (") && m.endsWith(")"));
+}
+
+/**
+ * Search inlineMarkers from top for the first marker matching `predicate`.
+ * Pop everything above it (emitting in reverse order), then pop and emit the match.
+ * If not found, do nothing.
+ */
+function popAndEmitMatching(
+  state: HandlerState,
+  predicate: (marker: string) => boolean,
+): void {
+  if (state.inlineMarkers.length === 0) return;
+
+  let matchIdx = -1;
+  for (let i = state.inlineMarkers.length - 1; i >= 0; i--) {
+    if (predicate(state.inlineMarkers[i])) {
+      matchIdx = i;
+      break;
+    }
+  }
+  if (matchIdx === -1) return;
+
+  // Pop everything above the match, emitting in reverse order
+  while (state.inlineMarkers.length > matchIdx) {
     state.output += state.inlineMarkers.pop()!;
   }
+  // Pop and emit the matching marker
+  state.output += state.inlineMarkers.pop()!;
 }
 
 function handleClosePicture(state: HandlerState): void {
@@ -620,7 +641,7 @@ function handleCloseFigure(state: HandlerState): void {
 }
 
 function handleCloseFigcaption(state: HandlerState): void {
-  state.inSummary = false;
+  state.inFigcaption = false;
 }
 
 function handleCloseDetails(state: HandlerState): void {
@@ -887,14 +908,25 @@ function handleCloseTag(state: HandlerState, name: string): void {
 }
 
 function popStack(state: HandlerState, name: string): void {
-  // Pop the matching element, or if stack is wrong, try to recover
-  if (state.stack.length > 0 && state.stack[state.stack.length - 1].name === name) {
+  if (state.stack.length === 0) return;
+
+  // Pop the matching element if it's on top
+  if (state.stack[state.stack.length - 1].name === name) {
     state.stack.pop();
-  } else {
-    // Try to find and remove from stack (mismatched tags)
-    const idx = state.stack.length - 1;
-    if (idx >= 0) state.stack.pop();
+    return;
   }
+
+  // Mismatched tags: search from top for the matching element
+  // and pop everything above it (including the match)
+  for (let i = state.stack.length - 1; i >= 0; i--) {
+    if (state.stack[i].name === name) {
+      state.stack.length = i; // truncate to remove match and everything above
+      return;
+    }
+  }
+
+  // Not found on stack at all — pop top as graceful degradation
+  state.stack.pop();
 }
 
 // ── Final Output Normalization ───────────────────────────────────────

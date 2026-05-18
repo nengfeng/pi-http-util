@@ -264,6 +264,22 @@ describe("stripTags()", () => {
     assert(!result.includes("color"));
   });
 
+  test("textarea content is preserved as text (not parsed as HTML)", () => {
+    const input = '<textarea><p>user input &amp; stuff</p></textarea>';
+    const result = stripTags(input);
+    // The inner <p> should be stripped (tags mode), but the text should survive
+    assert(result.includes("user input"));
+    assert(result.includes("stuff"));
+  });
+
+  test("textarea raw content preserved as-is (not parsed as HTML)", () => {
+    const input = '<textarea><b>bold</b> text</textarea>';
+    const result = stripTags(input);
+    // textarea content is raw text, <b> is literal text not a tag
+    assert(result.includes("<b>bold</b>"));
+    assert(result.includes("text"));
+  });
+
   test("tag removal prevents word concatenation", () => {
     const input = "<p>Bob</p>Marley";
     assert.equal(stripTags(input), "Bob Marley");
