@@ -1,5 +1,5 @@
 /**
- * tool.test.ts — Tests for the http_fetch execute pipeline.
+ * tool.test.ts — Tests for the pi-http-util execute pipeline.
  *
  * Exercises the actual fetch+strip logic (not just pure strip functions)
  * to catch bugs in response construction, header collection, and strip fallback.
@@ -12,7 +12,7 @@ import {
   executeFetch,
   validateUrl,
   buildHeaders,
-} from "../../.pi/extensions/http_fetch/fetch.ts";
+} from "../../.pi/extensions/pi-http-util/fetch.ts";
 
 // ── Server setup ─────────────────────────────────────────────────────
 

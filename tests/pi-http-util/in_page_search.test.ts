@@ -5,7 +5,7 @@
 import http from "node:http";
 import { assert, describe, test } from "./test-harness.ts";
 import { runSummary } from "./test-harness.ts";
-import { inPageSearch } from "../../.pi/extensions/http_fetch/core.ts";
+import { inPageSearch } from "../../.pi/extensions/pi-http-util/core.ts";
 
 // ── Server setup ─────────────────────────────────────────────────────
 

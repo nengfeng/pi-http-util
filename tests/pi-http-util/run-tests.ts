@@ -1,11 +1,11 @@
 /**
- * run-tests.ts — Master test runner for http_fetch extension.
+ * run-tests.ts — Master test runner for pi-http-util extension.
  *
  * Imports all test modules (which register tests via the shared harness),
  * runs integration test suites, then prints a unified summary.
  *
  * Run with:
- *   node --experimental-strip-types tests/http_fetch/run-tests.ts
+ *   node --experimental-strip-types tests/pi-http-util/run-tests.ts
  */
 
 import { runSummary } from "./test-harness.ts";

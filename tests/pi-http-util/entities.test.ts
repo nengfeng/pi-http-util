@@ -8,7 +8,7 @@ import {
   decodeHtmlEntity,
   decodeEntity,
   decodeTextEntities,
-} from "../../.pi/extensions/http_fetch/core.ts";
+} from "../../.pi/extensions/pi-http-util/core.ts";
 
 describe("decodeHtmlEntity()", () => {
 

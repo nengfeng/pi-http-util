@@ -1,5 +1,5 @@
 /**
- * test-harness.ts — Shared test infrastructure for http_fetch tests.
+ * test-harness.ts — Shared test infrastructure for pi-http-util tests.
  *
  * Each test file imports this module to get `describe`, `test`, and helpers.
  * The harness uses module-level counters shared across all test files
@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import { tokenize } from "../../.pi/extensions/http_fetch/core.ts";
+import { tokenize } from "../../.pi/extensions/pi-http-util/core.ts";
 
 // ── Counters (shared across all test files via module singleton) ─────
 

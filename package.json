@@ -1,11 +1,11 @@
 {
   "name": "pi-http-util",
-  "version": "1.3.0",
-  "description": "HTTP utility functions for pi",
+  "version": "2.0.0",
+  "description": "HTTP utility functions for Pi Coding Agent",
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "test": "node --experimental-strip-types tests/http_fetch/run-tests.ts"
+    "test": "node --experimental-strip-types tests/pi-http-util/run-tests.ts"
   },
   "keywords": ["pi-package"],
   "repository": {
@@ -13,8 +13,8 @@
     "url": "https://github.com/kulminaator/pi-http-util.git"
   },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "pi": {
-    "extensions": [".pi/extensions/http_fetch"]
+    "extensions": [".pi/extensions/pi-http-util"]
   }
 }

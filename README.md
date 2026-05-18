@@ -2,6 +2,62 @@
 
 A PI Agent extension for fetching web content, transforming HTML into clean output, and making raw HTTP requests.
 
+## Installation
+
+### Via `pi install` (recommended)
+
+Install directly from the GitHub repository:
+
+```bash
+pi install git:github.com/kulminaator/pi-http-util
+```
+
+This writes the package to your user settings (`~/.pi/agent/settings.json`) so it is available for all projects. Use `-l` to install project-locally (`.pi/settings.json`) instead:
+
+```bash
+pi install -l git:github.com/kulminaator/pi-http-util
+```
+
+Pin to a specific tag or branch:
+
+```bash
+pi install git:github.com/kulminaator/pi-http-util@v1.0.0
+```
+
+### Via `settings.json`
+
+Add the package manually to your settings:
+
+```json
+{
+  "packages": [
+    "git:github.com/kulminaator/pi-http-util"
+  ]
+}
+```
+
+### Manual installation
+
+Clone the repository and place it in pi's extension directory:
+
+```bash
+git clone https://github.com/kulminaator/pi-http-util.git ~/.pi/agent/extensions/pi-http-util
+```
+
+Or for project-local use:
+
+```bash
+git clone https://github.com/kulminaator/pi-http-util.git .pi/extensions/pi-http-util
+```
+
+### Try it without installing
+
+Test the extension for a single session:
+
+```bash
+pi -e git:github.com/kulminaator/pi-http-util
+```
+
 ## What It Does
 
 ### `http_fetch` — Fetch and Transform HTML
@@ -148,7 +204,7 @@ The `resolveStripMethod(requested, contentType)` function checks whether the res
 ## File Layout
 
 ```
-.pi/extensions/http_fetch/
+.pi/extensions/pi-http-util/
 ├── index.ts                   # Entry point (exports default function, registers tools)
 ├── core.ts                    # Barrel re-export of all pure functions
 ├── fetch.ts                   # Fetch pipeline (executeFetch, validateUrl, buildHeaders)
@@ -161,7 +217,7 @@ The `resolveStripMethod(requested, contentType)` function checks whether the res
 ├── strip.ts                   # Strip modes, resolveStripMethod, applyStrip
 └── in_page_search.ts          # In-page search tool (fetch + search + context extraction)
 
-tests/http_fetch/
+tests/pi-http-util/
 ├── run-tests.ts                   # Master runner (runs everything)
 ├── test-harness.ts                # Shared describe/test/collectTokens infrastructure
 ├── tokenizer.test.ts              # tokenize() + edge cases
@@ -182,11 +238,11 @@ Requires **Node.js ≥ 24** (for `--experimental-strip-types` to run TypeScript 
 
 ```bash
 # Run all tests (recommended)
-node --experimental-strip-types tests/http_fetch/run-tests.ts
+node --experimental-strip-types tests/pi-http-util/run-tests.ts
 
 # Or run a single test file standalone
-node --experimental-strip-types tests/http_fetch/tokenizer.test.ts
-node --experimental-strip-types tests/http_fetch/integration.test.ts
+node --experimental-strip-types tests/pi-http-util/tokenizer.test.ts
+node --experimental-strip-types tests/pi-http-util/integration.test.ts
 ```
 
 ### Test Structure

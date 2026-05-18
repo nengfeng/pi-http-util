@@ -1,5 +1,5 @@
 /**
- * core.ts — Barrel re-export of all http_fetch pure functions.
+ * core.ts — Barrel re-export of all pi-http-util pure functions.
  *
  * Actual implementations live in dedicated modules:
  * - tokenizer.ts  : HTML tokenizer (Token type, tokenize)
