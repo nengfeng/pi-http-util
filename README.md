@@ -4,6 +4,17 @@ A PI Agent extension for fetching web content, transforming HTML into clean outp
 It's main functionality http_fetch is designed to save tokens on LLM converting html to md or other compact shapes 
 before passing it to the LLM.
 
+## Usage
+
+Just tell the LLM to do something related to http, if your model has tool usage knowledge everything else is automatic.
+
+e.g.
+`Give me an overview of the project at https://github.com/kulminaator/pi-http-util`
+or (your LLM most likely knows the addresses of news pages anyway)
+`Find me the first 5 headlines from the news today`
+or
+`Using our tools, make a http post request with json content {"question": "who is there"} against the server listening on localhost on port 9000`
+
 ## Installation
 
 ### Via `pi install` (recommended)
