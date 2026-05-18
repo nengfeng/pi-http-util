@@ -1,8 +1,10 @@
-# http_fetch Extension
+# HTTP Utility Extension
 
-A PI Agent extension for fetching web content and transforming HTML into clean, readable output.
+A PI Agent extension for fetching web content, transforming HTML into clean output, and making raw HTTP requests.
 
 ## What It Does
+
+### `http_fetch` — Fetch and Transform HTML
 
 - **Fetch URLs** from the internet with a Chromium-like User-Agent, configurable HTTP methods, headers, and redirect handling
 - **Strip and transform** HTML content via 5 modes:
@@ -15,14 +17,29 @@ A PI Agent extension for fetching web content and transforming HTML into clean, 
 - **Rich response metadata** — every response includes the HTTP status code, all response headers, and the requested vs. actually applied strip method. Headers are printed directly in the output text under a `Response Headers:` section so LLM agents can read them without needing to inspect hidden metadata fields
 - **In-page search** — find text on a webpage with case-insensitive matching, HTML entity awareness, and configurable context extraction
 
-From the point of view of a regular LLM usage, the html2md makes the most sense
+### `raw_http_request` — Raw HTTP Requests
+
+- **Send raw HTTP requests** with no content stripping or transformation — responses are returned exactly as received
+- **File body input** — load request body from a file via `http_request_body_file`
+- **File response output** — write response body to a file via `http_response_body_file` (body returned to the LLM is empty in this case)
+- **Response size limiting** — cap accepted response size with `http_response_body_size_limit` (errors if exceeded)
+- **Configurable timeout** — set request timeout via `http_request_timeout` (default: 300 seconds)
+- **SSL verification control** — skip SSL certificate verification with `http_verify_ssl: false`
+- **Any HTTP method** — supports GET, POST, PUT, DELETE, PATCH, HEAD, and any custom method
+- **Unicode-safe** — correctly handles UTF-8 content (e.g. `ü õ ä ö`) in both request bodies and responses
+
+From the point of view of a regular LLM usage, the html2md makes the most sense for web pages.
 
 Usage - you can just casually ask it in pi with a prompt like this:
 ```
 Can you check from github what this project from https://github.com/kulminaator/pi-http-util  is about?
 ```
 
-## Response Format
+For raw API interactions, use `raw_http_request` when you need unaltered responses (JSON APIs, file uploads, binary data, etc.).
+
+## Response Formats
+
+### `http_fetch` Response
 
 The `http_fetch` tool output is a plain-text block visible to the LLM. It starts with a metadata header, followed by a `---` separator, then the body content:
 
@@ -56,6 +73,51 @@ The tool also returns a structured `details` object with the same metadata for p
 
 When a non-HTML response is received and a strip mode other than `none` was requested, the result text shows `(skipped, non-HTML content)` to make the fallback transparent.
 
+### `raw_http_request` Response
+
+The `raw_http_request` tool returns raw, unaltered response data:
+
+```
+HTTP 201
+Method: POST
+URL: http://api.example.com/posts
+Body size: 187B bytes
+---
+{
+  "id": "abc123",
+  "title": "My Post",
+  "body": "Hello world"
+}
+
+Response Headers:
+  content-type: application/json
+  date: Mon, 18 May 2026 09:06:32 GMT
+  ...
+```
+
+When `http_response_body_file` is set, the body is written to the file instead:
+
+```
+HTTP 200
+Method: GET
+URL: http://api.example.com/posts
+Response written to: /path/to/response.json
+
+Response Headers:
+  content-type: application/json
+  ...
+```
+
+The tool returns a structured `details` object with these fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `http_response_code` | `number` | The HTTP status code |
+| `http_response_headers` | `{ key, value }[]` | All response headers |
+| `http_response_body` | `string` | Raw response body (empty if written to file) |
+| `http_response_body_file` | `string \| null` | Path of file written (null if not used) |
+| `error` | `string \| null` | Error message (null on success) |
+
 ## Architecture
 
 The HTML-to-Markdown converter uses a **SAX-style event-driven pipeline**:
@@ -81,34 +143,37 @@ The `resolveStripMethod(requested, contentType)` function checks whether the res
 |------|-------------|
 | `http_fetch` | Fetch a URL with configurable strip mode, truncation limits, and strategy |
 | `in_page_search` | Search a webpage for text, return matching snippets with surrounding context |
+| `raw_http_request` | Send raw HTTP requests with no content stripping, file I/O, and size limits |
 
 ## File Layout
 
 ```
 .pi/extensions/http_fetch/
-├── index.ts            # Entry point (exports default function, registers tools)
-├── core.ts             # Barrel re-export of all pure functions
-├── fetch.ts            # Fetch pipeline (executeFetch, validateUrl, buildHeaders)
-├── tokenizer.ts        # HTML tokenizer (Token type, tokenize generator)
-├── entities.ts         # HTML entity decoding (named + numeric)
-├── whitespace.ts       # Whitespace detection and collapsing
-├── md_emitter.ts       # SAX-style event emitter (tokenize → text/open/close events)
-├── md_handler.ts       # SAX-style event handler (events → Markdown, element stack)
-├── strip.ts            # Strip modes, resolveStripMethod, applyStrip
-└── in_page_search.ts   # In-page search tool (fetch + search + context extraction)
+├── index.ts                   # Entry point (exports default function, registers tools)
+├── core.ts                    # Barrel re-export of all pure functions
+├── fetch.ts                   # Fetch pipeline (executeFetch, validateUrl, buildHeaders)
+├── raw_http_request.ts        # Raw HTTP request tool (no stripping, file I/O, size limits)
+├── tokenizer.ts               # HTML tokenizer (Token type, tokenize generator)
+├── entities.ts                # HTML entity decoding (named + numeric)
+├── whitespace.ts              # Whitespace detection and collapsing
+├── md_emitter.ts              # SAX-style event emitter (tokenize → text/open/close events)
+├── md_handler.ts              # SAX-style event handler (events → Markdown, element stack)
+├── strip.ts                   # Strip modes, resolveStripMethod, applyStrip
+└── in_page_search.ts          # In-page search tool (fetch + search + context extraction)
 
 tests/http_fetch/
-├── run-tests.ts              # Master runner (runs everything)
-├── test-harness.ts           # Shared describe/test/collectTokens infrastructure
-├── tokenizer.test.ts         # tokenize() + edge cases
-├── entities.test.ts          # Entity decoding + edge cases
-├── whitespace.test.ts        # Whitespace handling + surrogate pairs
-├── md_emitter.test.ts        # Event emitter + element classification
-├── md_handler.test.ts        # Event handler (HTML → Markdown conversion)
-├── strip.test.ts             # All strip modes + edge cases
-├── integration.test.ts       # http_fetch HTTP integration
-├── tool.test.ts              # Tool execute pipeline (headers, fallback, response structure)
-└── in_page_search.test.ts    # in_page_search HTTP integration
+├── run-tests.ts                   # Master runner (runs everything)
+├── test-harness.ts                # Shared describe/test/collectTokens infrastructure
+├── tokenizer.test.ts              # tokenize() + edge cases
+├── entities.test.ts               # Entity decoding + edge cases
+├── whitespace.test.ts             # Whitespace handling + surrogate pairs
+├── md_emitter.test.ts             # Event emitter + element classification
+├── md_handler.test.ts             # Event handler (HTML → Markdown conversion)
+├── strip.test.ts                  # All strip modes + edge cases
+├── integration.test.ts            # http_fetch HTTP integration
+├── tool.test.ts                   # Tool execute pipeline (headers, fallback, response structure)
+├── in_page_search.test.ts         # in_page_search HTTP integration
+└── raw_http_request.test.ts       # Raw HTTP request (validation, file I/O, size limits, server)
 ```
 
 ## Running the Tests
@@ -123,57 +188,6 @@ node --experimental-strip-types tests/http_fetch/run-tests.ts
 node --experimental-strip-types tests/http_fetch/tokenizer.test.ts
 node --experimental-strip-types tests/http_fetch/integration.test.ts
 ```
-
-### What Gets Tested
-
-| Suite | Coverage |
-|-------|----------|
-| `tokenize()` | HTML tokenizer — tags, attributes, comments, doctype |
-| `tokenize() — edge cases` | Malformed HTML, unclosed tags, nested quotes, etc. |
-| `decodeHtmlEntity()` | Named entity lookup, Latin-1 characters, case sensitivity |
-| `decodeEntity()` | Named + numeric (decimal/hex) entity decoding |
-| `entities — edge cases` | Long names, boundary values, emoji, perf, consecutive |
-| `decodeTextEntities()` | Entity decoding in text streams |
-| `isHtmlWhitespace()` | 16+ Unicode whitespace codepoints |
-| `collapseWhitespace()` | Multi-whitespace → single space |
-| `collapseWhitespace — surrogate pairs` | Emoji, CJK, surrogate pair safety |
-| `emitEvents()` | SAX event stream, comment/doctype filtering, attributes |
-| `headingLevel()` | h1-h6 detection, non-heading rejection |
-| `isListContainer()` | ul/ol detection |
-| `isTableRowElement()` | tr/td/th detection |
-| `SKIP_ELEMENTS` | script, style, head, meta, noscript, etc. |
-| `BLOCK_ELEMENTS` | div, p, h1, section, blockquote, table, ul, li, pre, br, hr |
-| `INLINE_FORMAT_ELEMENTS` | a, b, strong, i, em, code, mark |
-| `VOID_ELEMENTS` | br, img, input, hr, meta, link |
-| `processEvents() — headings` | h1-h6, multiple headings with content |
-| `processEvents() — bold/italic/strikethrough` | b, strong, i, em, s, strike, del, nested |
-| `processEvents() — code` | inline code, pre/code blocks, whitespace preservation |
-| `processEvents() — links and images` | a, img, alt escaping, missing href |
-| `processEvents() — lists` | ul, ol, nested lists |
-| `processEvents() — blockquote` | simple and nested blockquotes |
-| `processEvents() — tables` | headers, rows, empty tables, single cells |
-| `processEvents() — paragraphs and breaks` | p, br, hr, multiple hr |
-| `processEvents() — skip elements` | script, style, head, noscript, template, slot |
-| `processEvents() — inline extras` | sub, sup, q, abbr, mark |
-| `processEvents() — entity decoding` | named entities, emoji preservation |
-| `processEvents() — edge cases` | empty input, plain text, void close tags, unclosed tags, malformed HTML, unknown elements, blank line handling |
-| `processEvents() — complex document` | full HTML document to Markdown |
-| `processEvents() — details/summary` | collapsible sections |
-| `processEvents() — figure/figcaption` | images with captions |
-| `processEvents() — time` | datetime attribute handling |
-| `processEvents() — picture/source` | responsive images |
-| `stripNone()` | Identity (no-op) |
-| `stripWhitespace()` | Whitespace-only collapsing |
-| `stripAttributes()` | Tokenizer-based attribute removal |
-| `stripTags()` | Tag removal + entity decoding |
-| `stripTags() — edge cases` | Malformed HTML, nested scripts, special chars |
-| `stripHtmlToMd()` | HTML → Markdown conversion |
-| `stripHtmlToMd() — edge cases` | pre/code, sub/sup, q, abbr, mark, tables, emoji, etc. |
-| Integration | Local HTTP server, all strip modes, Content-Type fallback, error codes, network |
-| `http_fetch tool — response structure` | executeFetch pipeline, header collection, httpStatusCode, strip fallback, validateUrl, buildHeaders |
-| `in_page_search` | Search, entity matching, case-insensitive, tag boundaries, strip modes |
-
-Each test has a **5-second timeout** to prevent hangs.
 
 ### Test Structure
 
@@ -190,7 +204,9 @@ Tests are split into logical files, each independently runnable:
 | `integration.test.ts` | Integration | http_fetch HTTP server tests, Content-Type fallback, JSON/plain-text safety |
 | `tool.test.ts` | Integration | Tool execute pipeline — headers, httpStatusCode, strip fallback, response structure |
 | `in_page_search.test.ts` | Integration | Search, entities, boundaries, strip modes |
+| `raw_http_request.test.ts` | Unit + Integration | URL validation, headers, size limits, file I/O, local server (GET/POST/PUT/DELETE) |
 
 - **Unit tests** — pure functions from the extension modules, no I/O
 - **Integration tests** — spin up a local `http.Server` on a random port, exercise fetch + strip against real HTTP routes, tear down after
 - **Shared harness** — `test-harness.ts` provides `describe`, `test`, counters, and `runSummary()` used by all files
+- **Timeouts** — each test has a 5-second timeout to prevent hangs

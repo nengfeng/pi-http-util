@@ -45,3 +45,14 @@ export type { FetchParams, FetchResult } from "./fetch.ts";
 
 // In-page search
 export { inPageSearch } from "./in_page_search.ts";
+
+// Raw HTTP request
+export {
+  executeRawRequest,
+  validateRawUrl,
+  buildRawHeaders,
+  loadBodyFile,
+  writeResponseBody,
+  checkSizeLimit,
+} from "./raw_http_request.ts";
+export type { RawRequestParams, RawRequestResult } from "./raw_http_request.ts";

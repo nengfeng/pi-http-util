@@ -28,6 +28,9 @@ await runInPageSearchTests();
 const { runTests: runToolTests } = await import("./tool.test.ts");
 await runToolTests();
 
+const { runTests: runRawHttpTests } = await import("./raw_http_request.test.ts");
+await runRawHttpTests();
+
 // Print unified summary and exit
 const ok = await runSummary();
 if (!ok) process.exit(1);

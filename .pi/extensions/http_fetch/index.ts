@@ -19,8 +19,11 @@ import {
 } from "./fetch";
 import type { StripMode } from "./strip";
 import { inPageSearch } from "./in_page_search";
+import { executeRawRequest } from "./raw_http_request";
+import type { RawRequestParams } from "./raw_http_request";
 
 const DEFAULT_CONTEXT_LIMIT = 100;   // chars of context around a match
+const DEFAULT_RAW_TIMEOUT = 300;     // seconds
 
 // ── Tool ─────────────────────────────────────────────────────────────
 export default function (pi: ExtensionAPI) {
@@ -363,6 +366,177 @@ export default function (pi: ExtensionAPI) {
         const msg = err?.message ?? String(err);
         return {
           content: [{ type: "text", text: `Error: ${msg}` }],
+          details: {},
+          isError: true,
+        };
+      }
+    },
+  });
+
+  // ── raw_http_request tool ────────────────────────────────────────
+  pi.registerTool({
+    name: "raw_http_request",
+    label: "Raw HTTP Request",
+    description:
+      "Send a raw HTTP request with no content stripping or transformation. " +
+      "Returns the unaltered response body, headers, and status code. " +
+      "Supports file body input, file response output, SSL skipping, " +
+      "timeouts, and response size limits.",
+    promptSnippet:
+      "Send raw HTTP requests (no stripping, file I/O, size limits)",
+    promptGuidelines: [
+      "Use raw_http_request for raw, unaltered HTTP requests.",
+      "Use http_request_body for inline body text or http_request_body_file to send a file's contents.",
+      "Use http_response_body_file to write the response to a file instead of returning it.",
+      "Set http_response_body_size_limit to cap response size in bytes.",
+      "Set http_verify_ssl to false to skip SSL certificate verification.",
+    ],
+
+    parameters: Type.Object({
+      http_url: Type.String({
+        description:
+          "URL of the request (include query params here if any)",
+      }),
+      http_verify_ssl: Type.Optional(
+        Type.Boolean({
+          description:
+            "Whether to verify SSL certificates (default: true)",
+        })
+      ),
+      http_method: Type.Optional(
+        Type.String({
+          description:
+            "HTTP method to use (default: GET). E.g. POST, PUT, DELETE",
+        })
+      ),
+      http_request_body: Type.Optional(
+        Type.String({
+          description:
+            "Request body to send (optional, use instead of http_request_body_file)",
+        })
+      ),
+      http_request_body_file: Type.Optional(
+        Type.String({
+          description:
+            "Filename to read request body from (optional, alternative to http_request_body)",
+        })
+      ),
+      http_request_headers: Type.Optional(
+        Type.String({
+          description:
+            "Request headers as a JSON string, e.g. '{\"Content-Type\":\"application/json\"}'",
+        })
+      ),
+      http_request_timeout: Type.Optional(
+        Type.Integer({
+          description:
+            "Request timeout in seconds (default: 300)",
+        })
+      ),
+      http_response_body_file: Type.Optional(
+        Type.String({
+          description:
+            "Filename to write response body to (optional, response body will be empty when set)",
+        })
+      ),
+      http_response_body_size_limit: Type.Optional(
+        Type.Integer({
+          description:
+            "Max response body size in bytes (tool will error if exceeded)",
+        })
+      ),
+    }),
+
+    async execute(_toolCallId, params, signal, onUpdate, _ctx) {
+      const {
+        http_url,
+        http_verify_ssl = true,
+        http_method = "GET",
+        http_request_body,
+        http_request_body_file,
+        http_request_headers: rawHeaders,
+        http_request_timeout = DEFAULT_RAW_TIMEOUT,
+        http_response_body_file,
+        http_response_body_size_limit,
+      } = params;
+
+      // ── Build headers from JSON string ───────────────────────────
+      let customHeaders: Record<string, string> = {};
+      if (rawHeaders) {
+        try {
+          customHeaders = JSON.parse(rawHeaders);
+        } catch {
+          return {
+            content: [{
+              type: "text",
+              text: "Error: invalid JSON in `http_request_headers`",
+            }],
+            details: {},
+            isError: true,
+          };
+        }
+      }
+
+      // ── Notify progress ──────────────────────────────────────────
+      onUpdate?.({
+        content: [{ type: "text", text: `Fetching ${http_url} ...` }],
+      });
+
+      // ── Build params ─────────────────────────────────────────────
+      const requestParams: RawRequestParams = {
+        http_url,
+        http_method,
+        http_request_body,
+        http_request_body_file,
+        http_request_headers: customHeaders,
+        http_request_timeout,
+        http_verify_ssl,
+        http_response_body_file,
+        http_response_body_size_limit,
+      };
+
+      // ── Execute ──────────────────────────────────────────────────
+      try {
+        const result = await executeRawRequest(requestParams, signal);
+
+        // ── Format output ──────────────────────────────────────────
+        let output = `HTTP ${result.http_response_code}\n`;
+        output += `Method: ${http_method}\n`;
+        output += `URL: ${http_url}\n`;
+
+        if (result.http_response_body_file) {
+          output += `Response written to: ${result.http_response_body_file}\n`;
+        } else if (result.http_response_body) {
+          const bodyBytes = new TextEncoder()
+            .encode(result.http_response_body).length;
+          output += `Body size: ${formatSize(bodyBytes)} bytes\n`;
+          output += `---\n${result.http_response_body}`;
+        }
+
+        // ── Response headers ───────────────────────────────────────
+        if (result.http_response_headers.length > 0) {
+          output += `\n\nResponse Headers:\n`;
+          for (const { key, value } of result.http_response_headers) {
+            output += `  ${key}: ${value}\n`;
+          }
+        }
+
+        if (result.error) {
+          output += `\nError: ${result.error}\n`;
+        }
+
+        return {
+          content: [{ type: "text", text: output }],
+          details: result,
+          isError: result.error !== null,
+        };
+      } catch (err: any) {
+        const msg = err?.message ?? String(err);
+        return {
+          content: [{
+            type: "text",
+            text: `Error: ${msg}`,
+          }],
           details: {},
           isError: true,
         };
