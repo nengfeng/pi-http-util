@@ -20,7 +20,8 @@ import {
   stripHtmlToMd,
   resolveStripMethod,
 } from "./strip.ts";
-import { buildHeaders } from "./fetch.ts";
+import { buildHeaders, validateUrl } from "./fetch.ts";
+import { globalRateLimiter } from "./rate_limiter.ts";
 
 // ── Defaults ─────────────────────────────────────────────────────────
 const DEFAULT_CONTEXT_LIMIT = 100;
@@ -265,6 +266,14 @@ export async function inPageSearch(
   let contentType: string;
 
   try {
+    // ── Rate limiting ────────────────────────────────────────────
+    if (!globalRateLimiter.tryAcquire()) {
+      const waitSec = Math.ceil(globalRateLimiter.waitMs / 1000);
+      throw new Error(
+        `Rate limit exceeded. Try again in ${waitSec} seconds.`
+      );
+    }
+
     onUpdate?.({
       content: [{ type: "text", text: `Fetching ${url} ...` }],
     });
@@ -277,8 +286,26 @@ export async function inPageSearch(
     });
 
     finalUrl = res.url;
+
+    // Re-validate the final URL after redirects to prevent SSRF bypass
+    if (finalUrl !== url) {
+      const redirectError = validateUrl(finalUrl);
+      if (redirectError) {
+        throw new Error(`Redirect to blocked address: ${redirectError}`);
+      }
+    }
+
     status = res.status;
     contentType = res.headers.get("Content-Type") ?? "unknown";
+
+    const isTextContent = /^(text\/|application\/(json|xml|xhtml\+xml|javascript)|application\/x-www-form-urlencoded)/i.test(contentType);
+    if (!isTextContent) {
+      const contentLength = res.headers.get("Content-Length");
+      const sizeHint = contentLength ? `${contentLength} bytes` : "unknown size";
+      throw new Error(
+        `Non-text content received: ${contentType} (${sizeHint}). in_page_search only supports text content.`
+      );
+    }
     responseText = await res.text();
   } catch (err: any) {
     throw new Error(`Error fetching ${url}: ${err?.message ?? String(err)}`);

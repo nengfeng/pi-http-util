@@ -13,6 +13,10 @@ import {
   validateUrl,
   buildHeaders,
 } from "../../src/fetch.ts";
+import { setAllowPrivateHosts } from "../../src/fetch.ts";
+import { resetGlobalRateLimiter } from "../../src/rate_limiter.ts";
+
+setAllowPrivateHosts(true);
 
 // ── Server setup ─────────────────────────────────────────────────────
 
@@ -84,6 +88,7 @@ function stopServer(): Promise<void> {
 // ── Helper ───────────────────────────────────────────────────────────
 
 async function doFetch(url: string, overrides?: { strip?: string }): Promise<any> {
+  resetGlobalRateLimiter();
   return executeFetch({
     url,
     method: "GET",
@@ -183,16 +188,16 @@ export async function runTests() {
       assert.equal(validateUrl("https://example.com"), null);
     });
 
-    test("buildHeaders includes Chrome User-Agent", async () => {
+    test("buildHeaders includes pi-http-util User-Agent", async () => {
       const headers = buildHeaders();
-      assert(headers["User-Agent"].includes("Chrome"));
-      assert(headers["Accept"].includes("text/html"));
+      assert(headers["User-Agent"].includes("pi-http-util"));
+      assert.equal(headers["Accept"], "*/*");
     });
 
     test("buildHeaders merges custom headers", async () => {
       const headers = buildHeaders({ "X-Custom": "value" });
       assert.equal(headers["X-Custom"], "value");
-      assert(headers["User-Agent"].includes("Chrome"), "default headers preserved");
+      assert(headers["User-Agent"].includes("pi-http-util"), "default headers preserved");
     });
 
     test("executeFetch does not mutate caller's headers object", async () => {

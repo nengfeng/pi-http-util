@@ -7,11 +7,15 @@
  */
 
 import fs from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
 import { pathToFileURL } from "node:url";
+import { globalRateLimiter } from "./rate_limiter.ts";
 
 // ── Defaults ─────────────────────────────────────────────────────────
 
-const DEFAULT_TIMEOUT = 300_000; // 300 seconds in ms
+const DEFAULT_TIMEOUT = 30_000; // 30 seconds in ms
+const MAX_TIMEOUT = 120_000; // 120 seconds max
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -37,17 +41,69 @@ export interface RawRequestResult {
 
 // ── Validation ───────────────────────────────────────────────────────
 
+/**
+ * Check if a hostname is a private/internal IP address.
+ * Blocks: loopback (127.0.0.0/8), link-local (169.254.0.0/16),
+ * private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16),
+ * and IPv6 loopback (::1, fc00::/7).
+ */
+function isPrivateHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase();
+
+  if (lower === "::1" || lower.startsWith("fc") || lower.startsWith("fd")) {
+    return true;
+  }
+
+  const parts = lower.split(".");
+  if (parts.length !== 4) {
+    return false;
+  }
+
+  const octets = parts.map(Number);
+  if (octets.some((n) => isNaN(n) || n < 0 || n > 255)) {
+    return false;
+  }
+
+  const [a, b] = octets;
+
+  if (a === 127) return true;
+  if (a === 10) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 0) return true;
+
+  return false;
+}
+
+let allowRawPrivateHosts = false;
+
+/** Allow private/internal hostnames in raw URL validation (for testing). */
+export function setRawAllowPrivateHosts(allow: boolean): void {
+  allowRawPrivateHosts = allow;
+}
+
 /** Validate a URL string. Returns error message or null. */
 export function validateRawUrl(url: string): string | null {
   if (!url || typeof url !== "string") {
     return "`http_url` is required and must be a non-empty string";
   }
+  let parsed: URL;
   try {
-    new URL(url);
-    return null;
+    parsed = new URL(url);
   } catch {
     return `Invalid URL: "${url}"`;
   }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return `Invalid protocol: "${parsed.protocol}". Only http: and https: are allowed`;
+  }
+
+  if (!allowRawPrivateHosts && isPrivateHost(parsed.hostname)) {
+    return `Access to internal/private address "${parsed.hostname}" is blocked`;
+  }
+
+  return null;
 }
 
 // ── Header Building ──────────────────────────────────────────────────
@@ -68,11 +124,68 @@ export function buildRawHeaders(
 
 // ── File Helpers ─────────────────────────────────────────────────────
 
+const ALLOWED_FILE_EXTENSIONS = new Set([
+  ".txt", ".json", ".xml", ".html", ".htm", ".md",
+  ".csv", ".log", ".yaml", ".yml", ".toml", ".ini",
+  ".js", ".ts", ".py", ".sh", ".bat", ".ps1",
+]);
+
+/**
+ * Validate and sanitize a file path.
+ * Resolves to an absolute path and checks for traversal attempts.
+ * Returns the resolved path or throws an error.
+ */
+function sanitizeFilePath(filePath: string, operation: "read" | "write"): string {
+  if (!filePath || typeof filePath !== "string") {
+    throw new Error(`Invalid file path: path is required`);
+  }
+
+  const resolved = path.resolve(filePath);
+  const cwd = process.cwd();
+  const tmpDir = os.tmpdir();
+
+  // Allow paths within working directory or temp directory
+  const inCwd = resolved.startsWith(cwd + path.sep) || resolved === cwd;
+  const inTmp = resolved.startsWith(tmpDir + path.sep) || resolved === tmpDir;
+
+  if (!inCwd && !inTmp) {
+    throw new Error(
+      `File path "${filePath}" is outside the allowed directories (cwd or temp)`
+    );
+  }
+
+  // Check for null bytes
+  if (resolved.includes("\0")) {
+    throw new Error(`Invalid file path: contains null bytes`);
+  }
+
+  // Validate file extension
+  const ext = path.extname(resolved).toLowerCase();
+  if (ext && !ALLOWED_FILE_EXTENSIONS.has(ext)) {
+    throw new Error(
+      `File extension "${ext}" is not allowed for ${operation} operation. ` +
+      `Allowed: ${[...ALLOWED_FILE_EXTENSIONS].join(", ")}`
+    );
+  }
+
+  // For read operations, verify the file exists
+  if (operation === "read") {
+    try {
+      fs.access(resolved);
+    } catch {
+      throw new Error(`File not found: ${resolved}`);
+    }
+  }
+
+  return resolved;
+}
+
 /** Read file contents as text for use as request body. */
 export async function loadBodyFile(
   filePath: string,
 ): Promise<string> {
-  return fs.readFile(filePath, "utf-8");
+  const safe = sanitizeFilePath(filePath, "read");
+  return fs.readFile(safe, "utf-8");
 }
 
 /** Write response body to a file. Returns the file path written. */
@@ -80,8 +193,9 @@ export async function writeResponseBody(
   filePath: string,
   body: string,
 ): Promise<string> {
-  await fs.writeFile(filePath, body, "utf-8");
-  return filePath;
+  const safe = sanitizeFilePath(filePath, "write");
+  await fs.writeFile(safe, body, "utf-8");
+  return safe;
 }
 
 // ── Response Size Limiting ───────────────────────────────────────────
@@ -127,6 +241,13 @@ export async function executeRawRequest(
     http_response_body_file: null,
     error: null,
   };
+
+  // ── Rate limiting ──────────────────────────────────────────────
+  if (!globalRateLimiter.tryAcquire()) {
+    const waitSec = Math.ceil(globalRateLimiter.waitMs / 1000);
+    result.error = `Rate limit exceeded. Try again in ${waitSec} seconds.`;
+    return result;
+  }
 
   // ── Validate URL ─────────────────────────────────────────────────
   const urlError = validateRawUrl(http_url);
@@ -235,7 +356,10 @@ function buildTimeoutSignal(
   timeoutSeconds: number,
   externalSignal?: AbortSignal,
 ): AbortSignal | undefined {
-  const timeoutMs = Math.max(1000, timeoutSeconds * 1000);
+  const timeoutMs = Math.min(
+    MAX_TIMEOUT,
+    Math.max(1000, timeoutSeconds * 1000),
+  );
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
 
   if (externalSignal) {

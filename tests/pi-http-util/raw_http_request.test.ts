@@ -23,6 +23,10 @@ import {
   checkSizeLimit,
   executeRawRequest,
 } from "../../src/core.ts";
+import { resetGlobalRateLimiter } from "../../src/rate_limiter.ts";
+import { setRawAllowPrivateHosts } from "../../src/raw_http_request.ts";
+
+setRawAllowPrivateHosts(true);
 
 // ── Unit Tests ───────────────────────────────────────────────────────
 
@@ -219,8 +223,13 @@ export async function runTests() {
 
   await describe("raw_http_request (local HTTP server)", async () => {
 
+    async function resetAndExecute(params: any) {
+      resetGlobalRateLimiter();
+      return executeRawRequest(params);
+    }
+
     test("GET returns response body and headers", async () => {
-      const result = await executeRawRequest({
+      const result = await resetAndExecute({
         http_url: `${baseUrl}/json`,
         http_method: "GET",
         http_request_timeout: 300,
@@ -234,7 +243,7 @@ export async function runTests() {
     });
 
     test("POST sends body and echoes it back", async () => {
-      const result = await executeRawRequest({
+      const result = await resetAndExecute({
         http_url: `${baseUrl}/echo`,
         http_method: "POST",
         http_request_body: '{"key":"value"}',
@@ -247,7 +256,7 @@ export async function runTests() {
     });
 
     test("POST auto-sets Content-Type when not provided", async () => {
-      const result = await executeRawRequest({
+      const result = await resetAndExecute({
         http_url: `${baseUrl}/echo`,
         http_method: "POST",
         http_request_body: "test body",
@@ -263,7 +272,7 @@ export async function runTests() {
     });
 
     test("POST preserves custom Content-Type when provided", async () => {
-      const result = await executeRawRequest({
+      const result = await resetAndExecute({
         http_url: `${baseUrl}/echo`,
         http_method: "POST",
         http_request_body: '{"json":true}',
@@ -283,7 +292,7 @@ export async function runTests() {
       const tmp = tmpFile("post-body");
       await fs.writeFile(tmp, '{"from":"file"}');
       try {
-        const result = await executeRawRequest({
+        const result = await resetAndExecute({
           http_url: `${baseUrl}/echo`,
           http_method: "POST",
           http_request_body_file: tmp,
@@ -300,7 +309,7 @@ export async function runTests() {
     test("response written to file", async () => {
       const tmpOut = tmpFile("resp-out");
       try {
-        const result = await executeRawRequest({
+        const result = await resetAndExecute({
           http_url: `${baseUrl}/json`,
           http_method: "GET",
           http_request_timeout: 300,
@@ -319,7 +328,7 @@ export async function runTests() {
     });
 
     test("size limit exceeded returns error", async () => {
-      const result = await executeRawRequest({
+      const result = await resetAndExecute({
         http_url: `${baseUrl}/large`,
         http_method: "GET",
         http_request_timeout: 300,
@@ -331,7 +340,7 @@ export async function runTests() {
     });
 
     test("size limit not exceeded passes", async () => {
-      const result = await executeRawRequest({
+      const result = await resetAndExecute({
         http_url: `${baseUrl}/json`,
         http_method: "GET",
         http_request_timeout: 300,
@@ -342,7 +351,7 @@ export async function runTests() {
     });
 
     test("404 returns correct status", async () => {
-      const result = await executeRawRequest({
+      const result = await resetAndExecute({
         http_url: `${baseUrl}/404`,
         http_method: "GET",
         http_request_timeout: 300,
@@ -353,7 +362,7 @@ export async function runTests() {
     });
 
     test("custom headers forwarded", async () => {
-      const result = await executeRawRequest({
+      const result = await resetAndExecute({
         http_url: `${baseUrl}/echo`,
         http_method: "POST",
         http_request_body: "test",
@@ -365,6 +374,7 @@ export async function runTests() {
     });
 
     test("invalid URL returns error", async () => {
+      resetGlobalRateLimiter();
       const result = await executeRawRequest({
         http_url: "not-a-url",
         http_method: "GET",
@@ -375,6 +385,7 @@ export async function runTests() {
     });
 
     test("missing body file returns error", async () => {
+      resetGlobalRateLimiter();
       const result = await executeRawRequest({
         http_url: `${baseUrl}/echo`,
         http_method: "POST",
@@ -387,7 +398,7 @@ export async function runTests() {
     });
 
     test("unreachable host returns error", async () => {
-      const result = await executeRawRequest({
+      const result = await resetAndExecute({
         http_url: "http://192.0.2.1:1/test",
         http_method: "GET",
         http_request_timeout: 2,
@@ -397,7 +408,7 @@ export async function runTests() {
     });
 
     test("response headers collected", async () => {
-      const result = await executeRawRequest({
+      const result = await resetAndExecute({
         http_url: `${baseUrl}/echo`,
         http_method: "POST",
         http_request_body: "hello",
@@ -411,7 +422,7 @@ export async function runTests() {
     });
 
     test("PUT method sends body", async () => {
-      const result = await executeRawRequest({
+      const result = await resetAndExecute({
         http_url: `${baseUrl}/echo`,
         http_method: "PUT",
         http_request_body: "put body",
@@ -423,7 +434,7 @@ export async function runTests() {
     });
 
     test("DELETE method does not send body", async () => {
-      const result = await executeRawRequest({
+      const result = await resetAndExecute({
         http_url: `${baseUrl}/echo`,
         http_method: "DELETE",
         http_request_body: "should not appear",
@@ -431,18 +442,15 @@ export async function runTests() {
         http_verify_ssl: true,
       });
       assert.equal(result.error, null);
-      // DELETE body should be empty since isBodylessMethod only blocks GET/HEAD
-      // DELETE can have a body per HTTP spec, but our echo server reads it
     });
 
     test("no content stripping applied (raw response)", async () => {
-      const result = await executeRawRequest({
+      const result = await resetAndExecute({
         http_url: `${baseUrl}/json`,
         http_method: "GET",
         http_request_timeout: 300,
         http_verify_ssl: true,
       });
-      // JSON should be returned exactly as-is
       assert(result.http_response_body.includes('"status"'));
       assert(result.http_response_body.includes('"data"'));
     });
@@ -451,6 +459,7 @@ export async function runTests() {
       const tmp = tmpFile("prec-body");
       await fs.writeFile(tmp, "from file");
       try {
+        resetGlobalRateLimiter();
         const result = await executeRawRequest({
           http_url: `${baseUrl}/echo`,
           http_method: "POST",

@@ -6,6 +6,9 @@ import http from "node:http";
 import { assert, describe, test } from "./test-harness.ts";
 import { runSummary } from "./test-harness.ts";
 import { inPageSearch } from "../../src/core.ts";
+import { setAllowPrivateHosts } from "../../src/fetch.ts";
+
+setAllowPrivateHosts(true);
 
 // ── Server setup ─────────────────────────────────────────────────────
 

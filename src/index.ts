@@ -1,7 +1,7 @@
 /**
  * http_fetch — Fetch any URL from the internet.
  *
- * Pretends to be a generic Chromium browser via User-Agent.
+ * Uses pi-http-util User-Agent.
  * Supports content stripping (whitespace normalization, attribute removal,
  * tag removal) and configurable length limits.
  */
@@ -23,7 +23,7 @@ import { executeRawRequest } from "./raw_http_request";
 import type { RawRequestParams } from "./raw_http_request";
 
 const DEFAULT_CONTEXT_LIMIT = 100;   // chars of context around a match
-const DEFAULT_RAW_TIMEOUT = 300;     // seconds
+const DEFAULT_RAW_TIMEOUT = 30;     // seconds
 
 // ── Tool ─────────────────────────────────────────────────────────────
 export default function (pi: ExtensionAPI) {
@@ -31,7 +31,7 @@ export default function (pi: ExtensionAPI) {
     name: "http_fetch",
     label: "HTTP Fetch",
     description:
-      "Fetch a URL from the internet. Pretends to be a Chromium browser. " +
+      "Fetch a URL from the internet. " +
       "Supports content stripping via the `strip` parameter and configurable " +
       "length limits. Use `strip` to clean up HTML: `html2md` (default, convert " +
       "HTML to Markdown with headings, bold, links, lists, etc.), `tags` (remove " +
@@ -39,7 +39,7 @@ export default function (pi: ExtensionAPI) {
       "HTML attributes + collapse whitespace), `none` (raw content). Use " +
       "`max_bytes` and `max_lines` to cap output size. Truncation strategy: " +
       "`head` keeps the beginning, `tail` keeps the end.",
-    promptSnippet: "Fetch web pages via HTTP (Chromium UA, strip mode, truncation)",
+    promptSnippet: "Fetch web pages via HTTP (strip mode, truncation)",
     promptGuidelines: [
       "Use http_fetch to retrieve web content when the user asks to fetch, browse, or read a URL.",
       "Default strip=html2md converts HTML to readable Markdown — use this for most web pages.",
@@ -389,7 +389,10 @@ export default function (pi: ExtensionAPI) {
       "Use http_request_body for inline body text or http_request_body_file to send a file's contents.",
       "Use http_response_body_file to write the response to a file instead of returning it.",
       "Set http_response_body_size_limit to cap response size in bytes.",
-      "Set http_verify_ssl to false to skip SSL certificate verification.",
+      "WARNING: Setting http_verify_ssl to false disables SSL certificate verification, " +
+      "which makes the connection vulnerable to man-in-the-middle attacks. " +
+      "Only use this for trusted internal/testing environments. " +
+      "In production, always keep SSL verification enabled.",
     ],
 
     parameters: Type.Object({
@@ -400,7 +403,9 @@ export default function (pi: ExtensionAPI) {
       http_verify_ssl: Type.Optional(
         Type.Boolean({
           description:
-            "Whether to verify SSL certificates (default: true)",
+            "Whether to verify SSL certificates (default: true). " +
+            "WARNING: Disabling SSL verification exposes the connection to " +
+            "man-in-the-middle attacks. Only disable in trusted testing environments.",
         })
       ),
       http_method: Type.Optional(
@@ -430,7 +435,7 @@ export default function (pi: ExtensionAPI) {
       http_request_timeout: Type.Optional(
         Type.Integer({
           description:
-            "Request timeout in seconds (default: 300)",
+            "Request timeout in seconds (default: 30, max: 120)",
         })
       ),
       http_response_body_file: Type.Optional(
