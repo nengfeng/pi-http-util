@@ -9,8 +9,9 @@
 import { resolveStripMethod, applyStrip, type StripMode } from "./strip.ts";
 import { globalRateLimiter } from "./rate_limiter.ts";
 
-// ── Project User-Agent ──────────────────────────────────────────────
-const PROJECT_UA = "pi-http-util/1.2.0";
+// ── Chrome LTS User-Agent (144) ─────────────────────────────────────
+const CHROME_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36";
 
 // ── Defaults ─────────────────────────────────────────────────────────
 export const DEFAULT_MAX_BYTES = 200_000;
@@ -122,7 +123,7 @@ export function validateUrl(url: string): string | null {
  */
 export function buildHeaders(customHeaders?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = {
-    "User-Agent": PROJECT_UA,
+    "User-Agent": CHROME_UA,
     Accept: "*/*",
   };
 

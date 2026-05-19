@@ -1,7 +1,7 @@
 /**
  * http_fetch — Fetch any URL from the internet.
  *
- * Uses pi-http-util User-Agent.
+ * Pretends to be a Chrome browser via User-Agent.
  * Supports content stripping (whitespace normalization, attribute removal,
  * tag removal) and configurable length limits.
  */
@@ -31,7 +31,7 @@ export default function (pi: ExtensionAPI) {
     name: "http_fetch",
     label: "HTTP Fetch",
     description:
-      "Fetch a URL from the internet. " +
+      "Fetch a URL from the internet. Pretends to be a Chrome browser. " +
       "Supports content stripping via the `strip` parameter and configurable " +
       "length limits. Use `strip` to clean up HTML: `html2md` (default, convert " +
       "HTML to Markdown with headings, bold, links, lists, etc.), `tags` (remove " +
@@ -39,7 +39,7 @@ export default function (pi: ExtensionAPI) {
       "HTML attributes + collapse whitespace), `none` (raw content). Use " +
       "`max_bytes` and `max_lines` to cap output size. Truncation strategy: " +
       "`head` keeps the beginning, `tail` keeps the end.",
-    promptSnippet: "Fetch web pages via HTTP (strip mode, truncation)",
+    promptSnippet: "Fetch web pages via HTTP (Chrome UA, strip mode, truncation)",
     promptGuidelines: [
       "Use http_fetch to retrieve web content when the user asks to fetch, browse, or read a URL.",
       "Default strip=html2md converts HTML to readable Markdown — use this for most web pages.",

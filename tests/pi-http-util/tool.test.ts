@@ -188,16 +188,16 @@ export async function runTests() {
       assert.equal(validateUrl("https://example.com"), null);
     });
 
-    test("buildHeaders includes pi-http-util User-Agent", async () => {
+    test("buildHeaders includes Chrome User-Agent", async () => {
       const headers = buildHeaders();
-      assert(headers["User-Agent"].includes("pi-http-util"));
+      assert(headers["User-Agent"].includes("Chrome/144"));
       assert.equal(headers["Accept"], "*/*");
     });
 
     test("buildHeaders merges custom headers", async () => {
       const headers = buildHeaders({ "X-Custom": "value" });
       assert.equal(headers["X-Custom"], "value");
-      assert(headers["User-Agent"].includes("pi-http-util"), "default headers preserved");
+      assert(headers["User-Agent"].includes("Chrome/144"), "default headers preserved");
     });
 
     test("executeFetch does not mutate caller's headers object", async () => {
