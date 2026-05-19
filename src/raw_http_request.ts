@@ -11,6 +11,10 @@ import path from "node:path";
 import os from "node:os";
 import { pathToFileURL } from "node:url";
 import { globalRateLimiter } from "./rate_limiter.ts";
+import { validateUrl } from "./fetch.ts";
+
+const CHROME_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36";
 
 // ── Defaults ─────────────────────────────────────────────────────────
 
@@ -113,7 +117,7 @@ export function buildRawHeaders(
   customHeaders?: Record<string, string>,
 ): Record<string, string> {
   const headers: Record<string, string> = {
-    "User-Agent": "pi-http-util/1.2.0",
+    "User-Agent": CHROME_UA,
     Accept: "*/*",
   };
   if (customHeaders) {
@@ -297,6 +301,16 @@ export async function executeRawRequest(
   let responseText: string;
   try {
     const res = await fetch(http_url, fetchOptions);
+
+    // Re-validate the final URL after redirects to prevent SSRF bypass
+    if (res.url && res.url !== http_url) {
+      const redirectError = validateUrl(res.url);
+      if (redirectError) {
+        result.error = `Redirect to blocked address: ${redirectError}`;
+        return result;
+      }
+    }
+
     result.http_response_code = res.status;
 
     // Collect response headers
