@@ -12,7 +12,7 @@ import {
   executeFetch,
   validateUrl,
   buildHeaders,
-} from "../../.pi/extensions/pi-http-util/fetch.ts";
+} from "../../src/fetch.ts";
 
 // ── Server setup ─────────────────────────────────────────────────────
 

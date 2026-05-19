@@ -7,7 +7,7 @@
  */
 
 import assert from "node:assert/strict";
-import { tokenize, type Token } from "../../.pi/extensions/pi-http-util/core.ts";
+import { tokenize, type Token } from "../../src/core.ts";
 
 // ── Counters (shared across all test files via module singleton) ─────
 

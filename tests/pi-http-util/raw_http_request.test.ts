@@ -22,7 +22,7 @@ import {
   writeResponseBody,
   checkSizeLimit,
   executeRawRequest,
-} from "../../.pi/extensions/pi-http-util/core.ts";
+} from "../../src/core.ts";
 
 // ── Unit Tests ───────────────────────────────────────────────────────
 

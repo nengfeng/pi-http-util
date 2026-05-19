@@ -13,7 +13,7 @@ import {
   stripHtmlToMd,
   resolveStripMethod,
   applyStrip,
-} from "../../.pi/extensions/pi-http-util/core.ts";
+} from "../../src/core.ts";
 
 // ── Server setup ─────────────────────────────────────────────────────
 

@@ -8,7 +8,7 @@ import {
   isHtmlWhitespace,
   collapseWhitespace,
   collapseWhitespacePreserveLines,
-} from "../../.pi/extensions/pi-http-util/core.ts";
+} from "../../src/core.ts";
 
 describe("isHtmlWhitespace()", () => {
 

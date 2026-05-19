@@ -3,8 +3,8 @@
  */
 
 import { assert, describe, test } from "./test-harness.ts";
-import { emitEvents } from "../../.pi/extensions/pi-http-util/md_emitter.ts";
-import { processEvents } from "../../.pi/extensions/pi-http-util/md_handler.ts";
+import { emitEvents } from "../../src/md_emitter.ts";
+import { processEvents } from "../../src/md_handler.ts";
 
 function toMd(html: string): string {
   return processEvents(emitEvents(html));

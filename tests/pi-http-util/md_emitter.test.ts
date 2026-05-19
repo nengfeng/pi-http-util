@@ -12,7 +12,7 @@ import {
   headingLevel,
   isListContainer,
   isTableRowElement,
-} from "../../.pi/extensions/pi-http-util/md_emitter.ts";
+} from "../../src/md_emitter.ts";
 
 describe("emitEvents()", () => {
 

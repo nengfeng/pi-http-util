@@ -116,7 +116,7 @@ The `resolveStripMethod(requested, contentType)` function checks whether the res
 
 ## File Layout
 
-Source code in in `.pi/extensions/pi-http-util/`
+Source code in `src/`
 Tests in `tests`
 
 ## Running the Tests

@@ -1,8 +1,8 @@
 {
   "name": "pi-http-util",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "HTTP utility functions for Pi Coding Agent",
-  "main": "index.js",
+  "main": "src/index.ts",
   "type": "module",
   "scripts": {
     "test": "node --experimental-strip-types tests/pi-http-util/run-tests.ts"
@@ -15,6 +15,6 @@
   "author": "",
   "license": "MIT",
   "pi": {
-    "extensions": [".pi/extensions/pi-http-util"]
+    "extensions": ["src"]
   }
 }

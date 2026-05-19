@@ -10,7 +10,7 @@ import {
   stripAttributes,
   stripTags,
   stripHtmlToMd,
-} from "../../.pi/extensions/pi-http-util/core.ts";
+} from "../../src/core.ts";
 
 describe("stripNone()", () => {
 
